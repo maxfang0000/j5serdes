@@ -1,0 +1,12 @@
+VERSION         := test
+DEBUG           := 1
+OPT             := -O3
+#BUILD_DIR       := ./build/$(VERSION)
+#INSTALL_DIR     := ./output/$(VERSION)
+BUILD_DIR       := $(HOME)/dump/j5serdes/$(VERSION)/build
+INSTALL_DIR     := $(HOME)/dump/j5serdes/$(VERSION)/output
+
+INSTALL_INC_DIR := $(INSTALL_DIR)/include
+INSTALL_LIB_DIR := $(INSTALL_DIR)/lib
+INSTALL_BIN_DIR := $(INSTALL_DIR)/bin
+

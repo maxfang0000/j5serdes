@@ -1,0 +1,8 @@
+autom4te.cache
+configure
+build
+output
+build_config
+.vscode
+*.patch
+*~

@@ -1,0 +1,31 @@
+SRC_DIR  := @srcdir@
+IN_FILES := $(shell find $(SRC_DIR) -name \*.in)
+MK_DEPS  := Makefile
+
+MAKEFLAGS := --no-print-directory
+
+.PHONY: default all config
+
+.SILENT:
+
+all: default
+
+default:
+	@$(MAKE) -f main.mk all
+
+$(SRC_DIR)/configure: $(IN_FILES) $(SRC_DIR)/configure.ac
+	@cd $(SRC_DIR) && autoconf
+
+Makefile: $(IN_FILES) config.status
+	@$(MAKE) -f main.mk clean
+	@./config.status
+
+config.status: $(SRC_DIR)/configure
+	@./config.status --recheck
+
+config:
+	@$(MAKE) -B Makefile
+
+%:
+	@$(MAKE) -f main.mk $@
+

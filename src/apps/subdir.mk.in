@@ -1,0 +1,10 @@
+MY_DIR := apps
+
+MY_SUBDIRS := j5tojson
+
+MY_FULL_SUBDIRS := $(addprefix $(MY_DIR)/,$(MY_SUBDIRS))
+MY_SUBMAKES := $(addsuffix /subdir.mk,$(MY_FULL_SUBDIRS))
+
+include $(MY_SUBMAKES)
+MAKEFILE_DEPS += $(MY_SUBMAKES)
+

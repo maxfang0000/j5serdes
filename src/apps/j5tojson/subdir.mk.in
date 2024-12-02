@@ -1,0 +1,19 @@
+MY_DIR := apps/j5tojson
+
+MY_SOURCES := main.cc
+
+MY_FULL_SOURCES := $(addprefix $(MY_DIR)/,$(MY_SOURCES))
+
+SOURCES += $(MY_FULL_SOURCES)
+
+INSTALL_TARGETS += j5tojson
+
+j5tojson_BIN := j5tojson
+
+j5tojson_OBJECTS := $(patsubst %.cc,%.o,$(MY_FULL_SOURCES))
+
+EXCLUDE_MAINLIB_OBJECTS += $(j5tojson_OBJECTS)
+
+j5tojson: $(j5tojson_OBJECTS) $(MAIN_LIB)
+	@echo "... linking $@"
+

@@ -1,0 +1,168 @@
+##### VARIABLES FROM AUTOCONF
+
+prefix := @prefix@
+incdir := @INSTALL_INC_DIR@
+bindir := @INSTALL_BIN_DIR@
+libdir := @INSTALL_LIB_DIR@
+
+SRC_DIR := @srcdir@
+BUILD_DIR := @abs_top_builddir@
+VPATH := $(SRC_DIR)
+
+OPT := @OPT@
+DEBUG := @DEBUG@
+
+##### VARIABLE INITIALIZATION
+
+DEFINES             :=
+INCLUDES            :=
+SOURCES             :=
+OBJECTS             :=
+DEPS                :=
+LIBDIRS             :=
+LIBS                :=
+INSTALL_INC_SUBDIRS :=
+INSTALL_INCS        :=
+INSTALL_LIBS        :=
+INSTALL_BINS        :=
+
+##### PROJECT SPECIFICS
+
+SOURCES += j5serdes.cc
+
+MAIN_LIB := libj5serdes.so
+MAIN_INC := j5serdes.h
+
+##### FLAGS
+
+STD := -std=c++17
+
+COMMONFLAGS := $(DEFINES)
+CPPFLAGS := $(COMMONFLAGS) $(INCLUDES) $(STD)
+CCFLAGS  := $(COMMONFLAGS) $(INCLUDES) $(STD) -fPIC
+LDFLAGS  := $(COMMONFLAGS) -fPIC
+
+##### TOOLS
+
+CC := g++
+LD := g++
+INST := install
+
+ifeq ($(shell uname -s),Darwin)
+	CC := clang++
+	LD := clang++
+	INST := ginstall
+endif
+
+##### COMPILE RULES
+
+C_SOURCES  := $(filter %.c,$(SOURCES))
+CC_SOURCES := $(filter %.cc,$(SOURCES))
+
+OBJECTS += $(patsubst %.c,%.o,$(C_SOURCES))
+OBJECTS += $(patsubst %.cc,%.o,$(CC_SOURCES))
+
+DEPS += $(patsubst %.o,%.d,$(OBJECTS))
+
+.PHONY: all default clean
+
+all: default
+
+%.d: %.c
+	@echo "... generating dependency file $@ from $<"
+	@mkdir -p $(@D)
+	@$(CC) -MM $(CPPFLAGS) -MF $@ -MT '$@ $(patsubst %.d,%.o,$@)' $< || (rm -rf $@ && false)
+
+%.d: %.cc
+	@echo "... generating dependency file $@ from $<"
+	@mkdir -p $(@D)
+	@$(CC) -MM $(CPPFLAGS) -MF $@ -MT '$@ $(patsubst %.d,%.o,$@)' $< || (rm -rf $@ && false)
+
+%.o: %.c
+	@echo "... compiling $<"
+	@$(CC) $(CCFLAGS) -c $< -o $@
+
+%.o: %.cc
+	@echo "... compiling $<"
+	@$(CC) $(CCFLAGS) -c $< -o $@
+
+-include $(DEPS)
+
+##### INSTALL RULES
+
+INSTALL_LIBS += $(MAIN_LIB)
+INSTALL_INCS += $(MAIN_INC)
+
+#####
+
+INC_INSTALL_DEST :=
+LIB_INSTALL_DEST :=
+BIN_INSTALL_DEST :=
+
+define INST_INC
+INC_INSTALL_DEST += $(1)/$$(notdir $(2))
+$(1)/$$(notdir $(2)): $(2)
+	@echo "... installing $(2) to $(1)"
+	@$(INST) -m 644 -D $$< $$@
+endef
+
+define INST_INC_SUBDIR
+$$(foreach inc,$$($$(shell echo $(2)| tr a-z A-Z | tr \/ \_)_INSTALL_INCS),\
+  $$(eval $$(call INST_INC,$(1)/$(2),$$(inc))))
+endef
+
+define INST_LIB
+LIB_INSTALL_DEST += $(1)/$$(notdir $(2))
+$(1)/$$(notdir $(2)): $(2)
+	@echo "... installing $(2) to $(1)"
+	@$(INST) -m 755 -D $$< $$@
+endef
+
+define INST_BIN
+BIN_INSTALL_DEST += $(1)/$$(notdir $(2))
+$(1)/$$(notdir $(2)): $(2)
+	@echo "... installing $(2) to $(1)"
+	@$(INST) -m 755 -D $$< $$@
+endef
+
+$(foreach x,$(INSTALL_INCS),\
+  $(eval $(call INST_INC,$(incdir),$(x))))
+
+$(foreach x,$(INSTALL_INC_SUBDIRS),\
+  $(eval $(call INST_INC_SUBDIR,$(incdir),$(x))))
+
+$(foreach x,$(INSTALL_LIBS),\
+  $(eval $(call INST_LIB,$(libdir),$(x))))
+
+$(foreach x,$(INSTALL_BINS),\
+  $(eval $(call INST_BIN,$(bindir),$(x))))
+
+##### TARGETS
+
+default: install
+
+MAIN_LIB_INST_NAME :=
+ifeq ($(shell uname -s),Darwin)
+	MAIN_LIB_INST_NAME := -install_name @rpath/$(MAIN_LIB)
+endif
+
+$(MAIN_LIB): $(OBJECTS)
+	@$(LD) $(LDFLAGS) $(MAIN_LIB_INST_NAME) -shared $(OBJECTS) -o $@
+
+install:
+	@$(MAKE) -f main.mk do-install
+
+do-install: $(INC_INSTALL_DEST) $(LIB_INSTALL_DEST) $(BIN_INSTALL_DEST)
+
+$(incdir):
+	@$(INST) -m 755 -d $@
+
+$(libdir):
+	@$(INST) -m 755 -d $@
+
+$(bindir):
+	@$(INST) -m 755 -d $@
+
+clean:
+	@rm -rf $(OBJECTS) $(DEPS) $(MAIN_LIB)
+

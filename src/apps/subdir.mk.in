@@ -1,10 +1,30 @@
-MY_DIR := apps
+CURR_DIR := $(patsubst $(CURDIR)/%,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
-MY_SUBDIRS := j5tojson
+CURR_SOURCES      :=
+CURR_INSTALL_INCS :=
+CURR_INSTALL_LIBS :=
+CURR_INSTALL_BINS :=
 
-MY_FULL_SUBDIRS := $(addprefix $(MY_DIR)/,$(MY_SUBDIRS))
-MY_SUBMAKES := $(addsuffix /subdir.mk,$(MY_FULL_SUBDIRS))
+################################# MODIFY HERE  #################################
 
-include $(MY_SUBMAKES)
-MAKEFILE_DEPS += $(MY_SUBMAKES)
+CURR_SOURCES +=
 
+CURR_INSTALL_INCS +=
+
+############################### END MODIFY HERE  ###############################
+
+PREFIXED_SOURCES := $(addprefix $(CURR_DIR),$(CURR_SOURCES))
+
+SOURCES += $(PREFIXED_SOURCES)
+
+PREFIXED_INSTALL_INCS := $(addprefix $(CURR_DIR),$(CURR_INSTALL_INCS))
+
+INSTALL_INCS += $(PREFIXED_INSTALL_INCS)
+
+PREFIXED_INSTALL_LIBS := $(addprefix $(CURR_DIR),$(CURR_INSTALL_LIBS))
+
+INSTALL_LIBS += $(PREFIXED_INSTALL_LIBS)
+
+PREFIXED_INSTALL_BINS := $(addprefix $(CURR_DIR),$(CURR_INSTALL_BINS))
+
+INSTALL_BINS += $(PREFIXED_INSTALL_BINS)

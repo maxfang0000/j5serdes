@@ -1,19 +1,39 @@
-MY_DIR := apps/j5tojson
+CURR_DIR := $(patsubst $(CURDIR)/%,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
-MY_SOURCES := main.cc
+CURR_SOURCES      :=
+CURR_INSTALL_INCS :=
+CURR_INSTALL_LIBS :=
+CURR_INSTALL_BINS :=
 
-MY_FULL_SOURCES := $(addprefix $(MY_DIR)/,$(MY_SOURCES))
+################################# MODIFY HERE  #################################
 
-SOURCES += $(MY_FULL_SOURCES)
+CURR_SOURCES +=  \
+  main.cc
 
-INSTALL_TARGETS += j5tojson
+CURR_INSTALL_INCS +=
 
-j5tojson_BIN := j5tojson
+CURR_INSTALL_BINS += j5tojson
 
-j5tojson_OBJECTS := $(patsubst %.cc,%.o,$(MY_FULL_SOURCES))
+CURR_EXCLD_MAIN_SOURCES += main.cc
 
-EXCLUDE_MAINLIB_OBJECTS += $(j5tojson_OBJECTS)
+############################### END MODIFY HERE  ###############################
 
-j5tojson: $(j5tojson_OBJECTS) $(MAIN_LIB)
+PREFIXED_SOURCES := $(addprefix $(CURR_DIR),$(CURR_SOURCES))
+
+SOURCES += $(PREFIXED_SOURCES)
+
+PREFIXED_INSTALL_INCS := $(addprefix $(CURR_DIR),$(CURR_INSTALL_INCS))
+
+INSTALL_INCS += $(PREFIXED_INSTALL_INCS)
+
+INSTALL_LIBS += $(CURR_INSTALL_LIBS)
+
+INSTALL_BINS += $(CURR_INSTALL_BINS)
+
+PREFIXED_EXCLD_MAIN_SOURCES := $(addprefix $(CURR_DIR),$(CURR_EXCLD_MAIN_SOURCES))
+
+################################# MODIFY HERE  #################################
+
+j5tojson: $(PREFIXED_SOURCES) $(MAIN_LIB)
 	@echo "... linking $@"
-
+	@echo "  dummy command: cc $(PREFIXED_SOURCES) -l$(MAIN_LIB) -o"

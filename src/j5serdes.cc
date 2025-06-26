@@ -4,14 +4,28 @@ namespace J5Serdes {
 
 using namespace std;
 
+////////////////////////////////////////////////////////////////////////////////
+
+static void
+__put_spaces(ostream& os, int n)
+{
+  for (int i=0; i<n; ++i) { os << ' '; }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class JsonObjectImpl : public JsonObject {
 public:
   JsonObjectImpl() {};
   virtual ~JsonObjectImpl() {};
 
 private:
-  pair<iterator, bool>      insert(value_type&);
+  JsonRecordPtr             clone() const;
+  void                      serialize(ostream&, const s_config_t&) const;
+
   pair<iterator, bool>      insert(value_type&&);
+  pair<iterator, bool>      insert(string_view, JsonRecordPtr&&);
+  pair<iterator, bool>      insert(string_view, const JsonRecordPtr&);
 
   iterator                  find(const string& key);
   const_iterator            find(const string& key) const;
@@ -36,14 +50,29 @@ private:
   unordered_map<string, list<value_type>::iterator> _map;
 };
 
-pair<JsonObject::iterator, bool>
-JsonObjectImpl::insert(value_type& v)
+JsonRecordPtr
+JsonObjectImpl::clone() const
 {
-  if (_map.count(v.first)) { return { _data.end(), false }; }
-  _data.push_back({ v.first, std::move(v.second) });
-  auto it = prev(_data.end());
-  _map.insert({ it->first, it });
-  return { it, true };
+  return JsonObjectPtr();
+}
+
+void
+JsonObjectImpl::serialize(ostream& strm, const s_config_t& cfg) const
+{
+  strm << '{' << endl;
+  s_config_t cfg_next = cfg;
+  cfg_next.global_indentation += cfg.indentation_width;
+  bool first = true;
+  for (const auto& entry : _data) {
+    if (first) { first = false; }
+    else       { strm << ',' << endl; }
+    __put_spaces(strm, cfg_next.global_indentation);
+    strm << '"' << entry.first << "\" : ";
+    entry.second->serialize(strm, cfg_next);
+  }
+  strm << endl;
+  __put_spaces(strm, cfg.global_indentation);
+  strm << '}';
 }
 
 pair<JsonObject::iterator, bool>
@@ -54,6 +83,18 @@ JsonObjectImpl::insert(value_type&& v)
   auto it = prev(_data.end());
   _map.insert({ it->first, it });
   return { it, true };
+}
+
+pair<JsonObject::iterator, bool>
+JsonObjectImpl::insert(string_view key, JsonRecordPtr&& v)
+{
+  return insert(value_type(key, std::move(v)));
+}
+
+pair<JsonObject::iterator, bool>
+JsonObjectImpl::insert(string_view key, const JsonRecordPtr& v)
+{
+  return insert(value_type(key, v->clone()));
 }
 
 JsonObject::iterator
@@ -95,7 +136,11 @@ public:
   virtual ~JsonArrayImpl() {};
 
 private:
+  JsonRecordPtr  clone() const;
+  void           serialize(ostream&, const s_config_t&) const;
+
   void           push_back(JsonRecordPtr&&);
+  void           push_back(const JsonRecordPtr&);
 
   iterator       begin()       { return _data.begin(); };
   const_iterator begin() const { return _data.begin(); };
@@ -111,23 +156,107 @@ private:
   vector<JsonRecordPtr> _data;
 };
 
+JsonRecordPtr
+JsonArrayImpl::clone() const
+{
+  JsonArrayPtr ret = make_json_array();
+  for (const auto& item : _data) {
+    ret->push_back(item->clone());
+  }
+  return ret;
+}
+
+void
+JsonArrayImpl::serialize(ostream& strm, const s_config_t& cfg) const
+{
+  strm << '[' << endl;
+  s_config_t cfg_next = cfg;
+  cfg_next.global_indentation += cfg.indentation_width;
+  bool first = true;
+  for (const auto& item : _data) {
+    if (first) { first = false; }
+    else       { strm << ',' << endl; }
+    __put_spaces(strm, cfg_next.global_indentation);
+    item->serialize(strm, cfg_next);
+  }
+  strm << endl;
+  __put_spaces(strm, cfg.global_indentation);
+  strm << ']';
+}
+
 void
 JsonArrayImpl::push_back(JsonRecordPtr&& v)
 {
   _data.push_back(std::move(v));
 }
 
+void
+JsonArrayImpl::push_back(const JsonRecordPtr& v)
+{
+  _data.push_back(v->clone());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class JsonDataImpl : public JsonData {
 public:
-  JsonDataImpl() {};
+  enum class NativeType : uint8_t {
+    NONE = 0,
+    FLOAT = 1,
+    INT = 2,
+    BOOL = 3,
+    STRING = 4,
+  };
+  JsonDataImpl() : _native_type(NativeType::NONE) {};
+  JsonDataImpl(double value) : _native_type(NativeType::FLOAT)
+    { *reinterpret_cast<double*>(&_long_buf) = value; };
+  JsonDataImpl(string_view value) : _native_type(NativeType::STRING),
+                                    _string_buf(value), _long_buf(0)
+    { };
+  JsonDataImpl(bool value) : _native_type(NativeType::BOOL),
+                             _long_buf(value ? 1 : 0)
+    { };
   virtual ~JsonDataImpl() {};
 
 private:
+  JsonRecordPtr clone() const;
+  void          serialize(ostream&, const s_config_t&) const;
 
 private:
+  uint64_t   _long_buf;
+  string     _string_buf;
+  NativeType _native_type;
 };
+
+JsonRecordPtr
+JsonDataImpl::clone() const
+{
+  return make_unique<JsonDataImpl>(*this);
+}
+
+void
+JsonDataImpl::serialize(ostream& strm, const s_config_t& cfg) const
+{
+  switch (_native_type) {
+    case NativeType::NONE:
+      strm << "null";
+      break;
+    case NativeType::FLOAT:
+      strm << *reinterpret_cast<const double*>(&_long_buf);
+      break;
+    case NativeType::INT:
+      strm << *reinterpret_cast<const int64_t*>(&_long_buf);
+      break;
+    case NativeType::BOOL:
+      strm << (_long_buf ? "true" : "false");
+      break;
+    case NativeType::STRING:
+      strm << '"' << _string_buf << '"';
+      break;
+    default:
+      throw runtime_error("JsonData::serialize(): unknown native type.");
+  }
+}
 
 JsonObjectPtr
 make_json_object()
@@ -146,6 +275,26 @@ make_json_array()
 {
   return make_unique<JsonArrayImpl>();
 }
+
+template<typename T>
+JsonDataPtr
+make_json_data(T value)
+{
+  return make_unique<JsonDataImpl>(value);
+}
+
+template JsonDataPtr
+make_json_data<bool>(bool);
+template JsonDataPtr
+make_json_data<double>(double);
+template JsonDataPtr
+make_json_data<string_view>(string_view);
+template JsonDataPtr
+make_json_data<const char*>(const char*);
+template JsonDataPtr
+make_json_data<const string&>(const string&);
+template JsonDataPtr
+make_json_data<string>(string);
 
 }
 

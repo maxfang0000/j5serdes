@@ -1,0 +1,138 @@
+include config.mk
+
+##### VARIABLES FROM CONFIG
+
+prefix := $(CFG_INSTALL_DIR)
+
+SRC_DIR := $(CFG_SRC_DIR)
+BUILD_DIR := $(CFG_BUILD_DIR)
+VPATH := $(SRC_DIR)
+
+OPT := $(CFG_OPT)
+DEBUG := $(CFG_DEBUG)
+
+##### VARIABLE INITIALIZATION
+
+DEFINES  :=
+INCLUDES :=
+SOURCES  :=
+OBJECTS  :=
+DEPS     :=
+LIBDIRS  :=
+LIBS     :=
+
+##### MINITEST FRAMEWORK
+
+INCLUDES += -I$(CFG_TARGET_INC_DIR)
+SOURCES += minitest.cc minitest-main.cc
+LIBDIRS += -L$(CFG_TARGET_LIB_DIR)
+LIBS += -Wl,-rpath,$(CFG_TARGET_LIB_DIR)
+# --enable-new-dtags could be added if RPATH priority < LD_LIBRARY_PATH is
+# preferred.
+
+MAIN_BIN := test
+
+################################# MODIFY HERE  #################################
+
+##### PROJECT SPECIFICS
+
+INCLUDES +=
+
+SOURCES += \
+  utest-infra.cc       \
+  utest-json-object.cc \
+
+LIBDIRS +=
+
+LIBS += -lj5serdes
+
+############################### END MODIFY HERE  ###############################
+
+##### FLAGS
+
+STD := -std=c++17
+
+COMMONFLAGS := $(DEFINES)
+CPPFLAGS := $(COMMONFLAGS) $(INCLUDES) $(STD)
+CCFLAGS  := $(COMMONFLAGS) $(INCLUDES) $(STD) $(OPT)
+LDFLAGS  := $(COMMONFLAGS) $(OPT) $(LIBDIRS) $(LIBS)
+
+ifeq ($(DEBUG),1)
+CCFLAGS += -g
+LDFLAGS += -g
+endif
+
+##### TOOLS
+
+CC := g++
+LD := g++
+INST := install
+
+ifeq ($(shell uname -s),Darwin)
+CC := clang++
+LD := clang++
+INST := ginstall
+endif
+
+INST_CHECK := $(shell command -v $(INST) 2>/dev/null)
+ifeq ($(INST_CHECK),)
+$(error gnu install is not found under the name '$(INST)'. please install)
+endif
+
+##### COMPILE RULES
+
+C_SOURCES  := $(filter %.c,$(SOURCES))
+CC_SOURCES := $(filter %.cc,$(SOURCES))
+
+OBJECTS += $(patsubst %.c,%.o,$(C_SOURCES))
+OBJECTS += $(patsubst %.cc,%.o,$(CC_SOURCES))
+
+DEPS += $(patsubst %.o,%.d,$(OBJECTS))
+
+.PHONY: all test-target default run clean
+
+all: default
+
+%.d: %.c
+	@echo "... generating dependency file $@ from $(patsubst $(SRC_DIR)/%,%,$<)"
+	@mkdir -p $(@D)
+	@$(CC) -MM $(CPPFLAGS) -MF $@ -MT '$@ $(patsubst %.d,%.o,$@)' $< ||\
+   (rm -rf $@ && false)
+
+%.d: %.cc
+	@echo "... generating dependency file $@ from $(patsubst $(SRC_DIR)/%,%,$<)"
+	@mkdir -p $(@D)
+	@$(CC) -MM $(CPPFLAGS) -MF $@ -MT '$@ $(patsubst %.d,%.o,$@)' $< ||\
+   (rm -rf $@ && false)
+
+%.o: %.c
+	@echo "... compiling $(patsubst $(SRC_DIR)/%,%,$<)"
+	@$(CC) $(CCFLAGS) -c $< -o $@
+
+%.o: %.cc
+	@echo "... compiling $(patsubst $(SRC_DIR)/%,%,$<)"
+	@$(CC) $(CCFLAGS) -c $< -o $@
+
+ifneq (($filter-out clean test-target,$(MAKECMDGOALS)),)
+-include $(DEPS)
+endif
+
+##### TARGETS
+
+test-target:
+	@echo "... building test target from $(shell realpath ../)"
+	@cd .. && $(MAKE)
+	@echo "... finished building test target"
+
+default: test-target $(MAIN_BIN)
+
+run: $(MAIN_BIN)
+	@./$(MAIN_BIN)
+
+clean:
+	@rm -rf $(OBJECTS) $(DEPS) $(MAIN_BIN)
+	@echo "... all cleaned up"
+
+$(MAIN_BIN): $(OBJECTS)
+	@echo "... linking $@"
+	@$(LD) $(OBJECTS) $(LDFLAGS) -o $@

@@ -6,7 +6,6 @@ SRC_DIR  := $(CFG_SRC_DIR)
 IN_FILES := $(shell find $(SRC_DIR) -type f -name \*.in)
 SRC_IN_FILES := $(shell cd $(SRC_DIR) && find . -type f -name \*.in)
 POPULATED_IN_FILES := $(patsubst %.in,%,$(SRC_IN_FILES))
-VPATH := $(SRC_DIR)
 
 MAKEFLAGS := --no-print-directory
 
@@ -22,6 +21,9 @@ default: regenerate
 clean: regenerate
 	@$(MAKE) -f main.mk clean
 
+run: regenerate
+	@$(MAKE) -f main.mk run
+
 regenerate: .update_mk
 
 .update_mk: $(POPULATED_IN_FILES)
@@ -29,7 +31,7 @@ regenerate: .update_mk
 	@echo "... cleaning up old artifacts"
 	@$(MAKE) -f main.mk clean
 
-%.mk: %.mk.in
+%.mk: $(SRC_DIR)/%.mk.in
 	@echo "... regenerating $@"
 	@cp $< $@
 

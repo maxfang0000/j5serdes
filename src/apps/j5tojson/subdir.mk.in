@@ -19,6 +19,7 @@ CURR_EXCLD_MAIN_SOURCES += main.cc
 ############################### END MODIFY HERE  ###############################
 
 PREFIXED_SOURCES := $(addprefix $(CURR_DIR),$(CURR_SOURCES))
+PREFIXED_OBJECTS := $(patsubst %.cc,%.o,$(PREFIXED_SOURCES))
 
 SOURCES += $(PREFIXED_SOURCES)
 
@@ -34,6 +35,6 @@ PREFIXED_EXCLD_MAIN_SOURCES := $(addprefix $(CURR_DIR),$(CURR_EXCLD_MAIN_SOURCES
 
 ################################# MODIFY HERE  #################################
 
-j5tojson: $(PREFIXED_SOURCES) $(MAIN_LIB)
+j5tojson: $(PREFIXED_OBJECTS) $(MAIN_LIB)
 	@echo "... linking $@"
-	@echo "  dummy command: cc $(PREFIXED_SOURCES) -l$(MAIN_LIB) -o"
+	@$(CC) $(PREFIXED_OBJECTS) -L$(libdir) -l$(MAIN_LIB_NAME) $(MAIN_LIB_RPATH) -o $@

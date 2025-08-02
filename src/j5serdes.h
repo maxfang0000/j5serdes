@@ -40,6 +40,9 @@ struct s_config_t
   {};
 };
 
+JsonRecordPtr
+make_json_record(std::istream&, const d_config_t& cfg = d_config_t());
+
 JsonObjectPtr
 make_json_object();
 
@@ -49,9 +52,15 @@ make_json_object(std::istream&, const d_config_t& cfg = d_config_t());
 JsonArrayPtr
 make_json_array();
 
+JsonArrayPtr
+make_json_array(std::istream&, const d_config_t& cfg = d_config_t());
+
 template<typename T>
 JsonDataPtr
 make_json_data(T value);
+
+JsonDataPtr
+make_json_data(std::istream&, const d_config_t& cfg);
 
 class JsonRecord {
 public:
@@ -60,7 +69,8 @@ public:
   virtual ~JsonRecord() {};
   virtual Type type() const = 0;
   virtual JsonRecordPtr clone() const = 0;
-  virtual void serialize(std::ostream&, const s_config_t&) const = 0;
+  virtual void serialize(std::ostream&,
+                         const s_config_t& cfg = s_config_t()) const = 0;
 };
 
 JsonObject&
@@ -74,7 +84,8 @@ public:
   JsonObject() {};
   virtual ~JsonObject() {};
   JsonRecord::Type type() const { return JsonRecord::Type::OBJECT; };
-  virtual void serialize(std::ostream&, const s_config_t&) const = 0;
+  virtual void serialize(std::ostream&,
+                         const s_config_t& cfg = s_config_t()) const = 0;
 
   typedef std::pair<std::string, JsonRecordPtr>       value_type;
   typedef std::list<value_type>::iterator             iterator;
@@ -109,7 +120,8 @@ public:
   JsonArray() {};
   virtual ~JsonArray() {};
   JsonRecord::Type type() const { return JsonRecord::Type::ARRAY; }
-  virtual void serialize(std::ostream&, const s_config_t&) const = 0;
+  virtual void serialize(std::ostream&,
+                         const s_config_t& cfg = s_config_t()) const = 0;
 
   typedef std::vector<JsonRecordPtr>::iterator       iterator;
   typedef std::vector<JsonRecordPtr>::const_iterator const_iterator;
@@ -133,7 +145,8 @@ public:
   JsonData() {};
   virtual ~JsonData() {};
   JsonRecord::Type type() const { return JsonRecord::Type::DATA; }
-  virtual void serialize(std::ostream&, const s_config_t&) const = 0;
+  virtual void serialize(std::ostream&,
+                         const s_config_t& cfg = s_config_t()) const = 0;
 };
 
 }

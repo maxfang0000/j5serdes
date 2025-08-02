@@ -17,7 +17,7 @@ MAKEFLAGS := --no-print-directory
 all: default
 
 default: regenerate
-	@$(MAKE) -f main.mk
+	@$(MAKE) -f main.mk default
 
 clean: regenerate
 	@$(MAKE) -f main.mk clean

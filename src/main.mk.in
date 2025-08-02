@@ -50,6 +50,9 @@ INSTALL_BINS += $(MAIN_BIN)
 
 ############################### END MODIFY HERE  ###############################
 
+MAIN_LIB_NAME := $(basename $(patsubst lib%,%,$(MAIN_LIB)))
+MAIN_LIB_RPATH := -Wl,-rpath,$(libdir)
+
 ##### SUBDIRS
 
 SUBMKS := $(shell find . -type f -name subdir.mk)

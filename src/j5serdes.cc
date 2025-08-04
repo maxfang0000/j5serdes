@@ -7,6 +7,13 @@ using namespace std;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define assert_msg(cond, msg)            \
+  if (!(cond)) {                         \
+    stringstream errss;                  \
+    errss << __func__ << "(): " << msg;  \
+    throw runtime_error(errss.str());    \
+  }
+
 static void
 __put_spaces(ostream& os, int n)
 {
@@ -56,28 +63,35 @@ __skip_no_parse(istream& istrm)
   }
 }
 
+static const unordered_map<char, char> __escape_map = {
+  { '\b', 'b' },
+  { '\f', 'f' },
+  { '\n', 'n' },
+  { '\r', 'r' },
+  { '\t', 't' },
+  { '\\', '\\' },
+  { '/',  '/' },
+  { '"',  '"' },
+  { '\'', '\'' },
+};
+static const unordered_map<char, char> __unescape_map = {
+  { 'b',  '\b' },
+  { 'f',  '\f' },
+  { 'n',  '\n' },
+  { 'r',  '\r' },
+  { 't',  '\t' },
+  { '\\', '\\' },
+  { '/',  '/' },
+  { '"',  '"' },
+  { '\'', '\'' },
+};
+
 static string
-__escape_string(istream& istrm, bool escape_sq = false)
+__retrieve_escaped_string(istream& istrm, bool escape_sq = false)
 {
   char c = static_cast<char>(istrm.get());
-  if (c == '"') {
-    return "\"";
-  } else if (c == '\'' && escape_sq) {
-    return "'";
-  } else if (c == '\\') {
-    return "\\";
-  } else if (c == '/') {
-    return "/";
-  } else if (c == 'b') {
-    return "\b";
-  } else if (c == 'f') {
-    return "\f";
-  } else if (c == 'n') {
-    return "\n";
-  } else if (c == 'r') {
-    return "\r";
-  } else if (c == 't') {
-    return "\t";
+  if (__unescape_map.count(c)) {
+    return string(1, __unescape_map.at(c));
   } else if (c == '\n') {
     return "";
   } else if (c == '\r') {
@@ -163,7 +177,7 @@ __retrieve_quoted_string(istream& istrm)
   while (istrm && !istrm.eof()) {
     char c = istrm.get();
     if (c == '\\') {
-      ret += __escape_string(istrm, open_quote == '\'');
+      ret += __retrieve_escaped_string(istrm, open_quote == '\'');
     } else if (c == open_quote) {
       closed = true; break;
     } else {
@@ -175,6 +189,25 @@ __retrieve_quoted_string(istream& istrm)
     errss << __func__ << "(): missing closing quote character `"
           << open_quote << "'.";
     throw runtime_error(errss.str());
+  }
+  return ret;
+}
+
+string
+__escape_string(string_view sv, bool in_sq = false)
+{
+  string ret;
+  for (char c : sv) {
+    if (in_sq && c == '"') {
+      ret += c;
+    } else if (!in_sq && c == '\'') {
+      ret += c;
+    } else if (__escape_map.count(c)) {
+      ret += '\\';
+      ret += __escape_map.at(c);
+    } else {
+      ret += c;
+    }
   }
   return ret;
 }
@@ -317,6 +350,9 @@ private:
   iterator       end()         { return _data.end(); };
   const_iterator end() const   { return _data.end(); };
 
+  JsonRecord&    at(size_t idx)          { return *_data.at(idx); };
+  const JsonRecord& at(size_t idx) const { return *_data.at(idx); };
+
   void           clear()       { _data.clear(); };
 
   bool           empty() const { return _data.empty(); };
@@ -423,7 +459,7 @@ JsonDataImpl::serialize(ostream& strm, const s_config_t& cfg) const
       strm << (_long_buf ? "true" : "false");
       break;
     case NativeType::STRING:
-      strm << '"' << _string_buf << '"';
+      strm << '"' << __escape_string(_string_buf) << '"';
       break;
     default:
       throw runtime_error("JsonData::serialize(): unknown native type.");
@@ -475,6 +511,19 @@ template JsonDataPtr
 make_json_data<string>(string);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+enum class JsonDeserializeState : uint8_t {
+  OBJECT_OPEN,
+  OBJECT_KEY,
+  OBJECT_COLON,
+  OBJECT_VALUE,
+  OBJECT_COMMA,
+  OBJECT_CLOSE,
+  ARRAY_OPEN,
+  ARRAY_ENTRY,
+  ARRAY_COMMA,
+  ARRAY_CLOSE
+};
 
 JsonRecordPtr
 make_json_record(istream& istrm, const d_config_t& cfg)
@@ -568,62 +617,40 @@ make_json_array(istream& istrm, const d_config_t& cfg)
 {
   // Skip leading whitespace characters in the input stream
   __skip_no_parse(istrm);
-  if (istrm.eof()) {
-    return JsonArrayPtr();  /* return nullptr if nothing matched */
-  }
-  if (istrm.peek() == '[') {
-    istrm.get();
-    unique_ptr<JsonArrayImpl> ret = make_unique<JsonArrayImpl>();
-    bool closed = false;
-    bool expect_entry = true;
-    bool expect_comma = false;
-    while (istrm && !istrm.eof()) {
-      __skip_no_parse(istrm);
-      if (istrm.eof()) { break; }
-      char c = istrm.peek();
-      if (c == ']') {
-        istrm.get(); closed = true; break;
-      } else if (c == ',') {
-        if (!expect_comma) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected comma in json array.";
-          throw runtime_error(errss.str());
-        }
-        istrm.get();
-        expect_entry = true;
-        expect_comma = false;
-      } else {
-        if (!expect_entry) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected non-json characters in json "
-                << "array.";
-          throw runtime_error(errss.str());
-        }
-        if (expect_comma) {
-          stringstream errss;
-          errss << __func__ << "(): expecting comma in json array.";
-          throw runtime_error(errss.str());
-        }
-        auto item = make_json_record(istrm, cfg);
-        if (item == JsonRecordPtr()) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected non-json characters in json "
-                << "array.";
-          throw runtime_error(errss.str());
-        }
-        ret->push_back(std::move(item));
-        expect_entry = false;
-        expect_comma = true;
-      }
+  if (istrm.eof() || istrm.peek() != '[') { return JsonArrayPtr(); }
+  JsonDeserializeState state = JsonDeserializeState::ARRAY_OPEN;
+  istrm.get();  /* consume the opening square bracket */
+  unique_ptr<JsonArrayImpl> ret = make_unique<JsonArrayImpl>();
+  state = JsonDeserializeState::ARRAY_ENTRY;
+  while (istrm && !istrm.eof()) {
+    __skip_no_parse(istrm);
+    if (istrm.eof()) { break; }
+    char c = istrm.peek();
+    if (c == ']') {
+      assert_msg(state == JsonDeserializeState::ARRAY_COMMA ||
+                 state == JsonDeserializeState::ARRAY_ENTRY,
+                 "unexpected closing square bracket in json array.");
+      istrm.get();
+      state = JsonDeserializeState::ARRAY_CLOSE;
+      break;
+    } else if (c == ',') {
+      assert_msg(state == JsonDeserializeState::ARRAY_COMMA,
+                 "unexpected comma in json array.");
+      istrm.get();
+      state = JsonDeserializeState::ARRAY_ENTRY;
+    } else {
+      assert_msg(state == JsonDeserializeState::ARRAY_ENTRY,
+                 "unexpected non-json characters in json array.");
+      auto item = make_json_record(istrm, cfg);
+      assert_msg(item != JsonRecordPtr(),
+                 "unexpected non-json characters in json array entry.");
+      ret->push_back(std::move(item));
+      state = JsonDeserializeState::ARRAY_COMMA;
     }
-    if (!closed) {
-      stringstream errss;
-      errss << __func__ << "(): missing closing square bracket.";
-      throw runtime_error(errss.str());
-    }
-    return ret;
   }
-  return JsonArrayPtr();  /* return nullptr if nothing matched */ 
+  assert_msg(state == JsonDeserializeState::ARRAY_CLOSE,
+             "missing closing square bracket in json array.");
+  return ret;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -633,103 +660,60 @@ make_json_object(istream& istrm, const d_config_t& cfg)
 {
   // Skip leading whitespace characters in the input stream
   __skip_no_parse(istrm);
-  if (istrm.eof()) {
-    return JsonObjectPtr();  /* return nullptr if nothing matched */
-  }
-  if (istrm.peek() == '{') {
-    istrm.get();
-    unique_ptr<JsonObjectImpl> ret = make_unique<JsonObjectImpl>();
-    bool closed = false;
-    bool expect_key = true;
-    bool expect_colon = false;
-    bool expect_value = false;
-    bool expect_comma = false;
-    string key;
-    while (istrm && !istrm.eof()) {
-      __skip_no_parse(istrm);
-      if (istrm.eof()) { break; }
-      char c = istrm.peek();
-      if (c == '}') {
-        istrm.get();
-        closed = true;
-        break;
-      } else if (c == ',') {
-        if (!expect_comma) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected comma in json object.";
-          throw runtime_error(errss.str());
-        }
-        istrm.get();
-        expect_key = true;
-        expect_comma = false;
-      } else if (c == ':') {
-        if (!expect_colon) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected colon in json object.";
-          throw runtime_error(errss.str());
-        }
-        istrm.get();
-        expect_colon = false;
-        expect_value = true;
-      } else if (expect_key) {
-        __skip_no_parse(istrm);
-        if (istrm.peek() == '"' || istrm.peek() == '\'') {
-          key = __retrieve_quoted_string(istrm);
-        } else {
-          key.clear();
-          while (istrm && !istrm.eof()) {
-            char c = istrm.peek();
-            if (std::isspace(c) ||
-                c == ':' || c == ',' || c == ']' || c == '}')
-            { break; }
-            key += static_cast<char>(istrm.get());
-          }
-        }
-        if (key.empty()) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected non-json characters in json "
-                << "object key.";
-          throw runtime_error(errss.str());
-        }
-        expect_key = false;
-        expect_colon = true;
+  if (istrm.eof() || istrm.peek() != '{') { return JsonObjectPtr(); }
+  JsonDeserializeState state = JsonDeserializeState::OBJECT_OPEN;
+  istrm.get();  /* consume the opening curly brace */
+  unique_ptr<JsonObjectImpl> ret = make_unique<JsonObjectImpl>();
+  state = JsonDeserializeState::OBJECT_KEY;
+  string key;
+  while (istrm && !istrm.eof()) {
+    __skip_no_parse(istrm);
+    if (istrm.eof()) { break; }
+    char c = istrm.peek();
+    if (c == '}') {
+      assert_msg(state == JsonDeserializeState::OBJECT_COMMA ||
+                 state == JsonDeserializeState::OBJECT_KEY,
+                 "unexpected closing curly brace in json object.");
+      istrm.get();
+      state = JsonDeserializeState::OBJECT_CLOSE;
+      break;
+    } else if (c == ',') {
+      assert_msg(state == JsonDeserializeState::OBJECT_COMMA,
+                 "unexpected comma in json object.");
+      istrm.get();
+      state = JsonDeserializeState::OBJECT_KEY;
+    } else if (c == ':') {
+      assert_msg(state == JsonDeserializeState::OBJECT_COLON,
+                 "unexpected colon in json object.");
+      istrm.get();
+      state = JsonDeserializeState::OBJECT_VALUE;
+    } else if (state == JsonDeserializeState::OBJECT_KEY) {
+      if (c == '"' || c == '\'') {
+        key = __retrieve_quoted_string(istrm);
       } else {
-        if (!expect_value) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected non-json characters in json "
-                << "object value.";
-          throw runtime_error(errss.str());
+        key.clear();
+        while (istrm && !istrm.eof()) {
+          char c = istrm.peek();
+          if (std::isspace(c) || c == ':' || c == ',' || c == '}') { break; }
+          key += static_cast<char>(istrm.get());
         }
-        if (expect_comma) {
-          stringstream errss;
-          errss << __func__ << "(): expecting comma in json object.";
-          throw runtime_error(errss.str());
-        }
-        if (expect_colon) {
-          stringstream errss;
-          errss << __func__ << "(): expecting colon in json object.";
-          throw runtime_error(errss.str());
-        }
-        auto value = make_json_record(istrm, cfg);
-        if (value == JsonRecordPtr()) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected non-json characters in json "
-                << "object value.";
-          throw runtime_error(errss.str());
-        }
-        ret->insert(std::string_view(key), std::move(value));
-        expect_value = false;
-        expect_comma = true;
       }
+      assert_msg(key.length(),
+                 "unexpected non-json characters in json object key.");
+      state = JsonDeserializeState::OBJECT_COLON;
+    } else {
+      assert_msg(state == JsonDeserializeState::OBJECT_VALUE,
+                 "unexpected non-json characters in json object value.");
+      auto value = make_json_record(istrm, cfg);
+      assert_msg(value != JsonRecordPtr(),
+                 "unexpected non-json characters in json object value.");
+      ret->insert(std::string_view(key), std::move(value));
+      state = JsonDeserializeState::OBJECT_COMMA;
     }
-    if (!closed) {
-      stringstream errss;
-      errss << __func__ << "(): missing closing curly brace.";
-      throw runtime_error(errss.str());
-    }
-    return ret;
   }
-  return JsonObjectPtr();  /* return nullptr if nothing matched */
+  assert_msg(state == JsonDeserializeState::OBJECT_CLOSE,
+             "missing closing curly brace in json object.");
+  return ret;
 }
 
 }

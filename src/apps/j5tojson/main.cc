@@ -20,7 +20,7 @@ int main(int argc, const char* argv[])
   }
 
   try {
-    auto json = make_json_record(ifstr, d_config_t());
+    auto json = make_json_record(ifstr);
     json->serialize(cout);
     cout << endl;
   } catch (const exception& e) {

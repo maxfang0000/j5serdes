@@ -134,6 +134,9 @@ public:
   virtual iterator          end() = 0;
   virtual const_iterator    end() const = 0;
 
+  virtual JsonRecord&       at(size_t) = 0;
+  virtual const JsonRecord& at(size_t) const = 0;
+
   virtual void              clear() = 0;
 
   virtual bool              empty() const = 0;

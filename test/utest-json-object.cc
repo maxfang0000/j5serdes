@@ -24,21 +24,20 @@ TEST(JsonObject, basic_ops)
   cout << endl;
 }
 
-class string_view_streambuf : public streambuf {
-public:
-  string_view_streambuf(string_view sv)
-  {
-    char* begin = const_cast<char*>(sv.data());
-    char* end   = begin + sv.size();
-    setg(begin, begin, end);
-  };
-};
 class string_view_istream : public istream {
 public:
-  string_view_istream(string_view sv)
-    : istream(nullptr), buffer(sv)
+  string_view_istream(string_view sv) : istream(nullptr), buffer(sv)
   { rdbuf(&buffer); };
 private:
+  class string_view_streambuf : public streambuf {
+  public:
+    string_view_streambuf(string_view sv)
+    {
+      char* begin = const_cast<char*>(sv.data());
+      char* end   = begin + sv.size();
+      setg(begin, begin, end);
+    };
+  };
   string_view_streambuf buffer;
 };
 
@@ -50,7 +49,8 @@ TEST(JsonObject, data_deserialize1)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   cout << "original:" << endl << json_str << endl;
-  auto data = make_json_data(istrm, d_config_t());
+  auto data = make_json_record(istrm, d_config_t());
+  cout << "parsed and serialized:" << endl;
   data->serialize(cout);
   cout << endl;
 }
@@ -63,7 +63,8 @@ TEST(JsonObject, data_deserialize2)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   cout << "original:" << endl << json_str << endl;
-  auto data = make_json_data(istrm, d_config_t());
+  auto data = make_json_record(istrm, d_config_t());
+  cout << "parsed and serialized:" << endl;
   data->serialize(cout);
   cout << endl;
 }
@@ -76,7 +77,8 @@ TEST(JsonObject, data_deserialize3)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   cout << "original:" << endl << json_str << endl;
-  auto data = make_json_data(istrm, d_config_t());
+  auto data = make_json_record(istrm, d_config_t());
+  cout << "parsed and serialized:" << endl;
   data->serialize(cout);
   cout << endl;
 }
@@ -89,7 +91,8 @@ TEST(JsonObject, array_deserialize1)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   cout << "original:" << endl << json_str << endl;
-  auto array = make_json_array(istrm, d_config_t());
+  auto array = make_json_record(istrm, d_config_t());
+  cout << "parsed and serialized:" << endl;
   array->serialize(cout);
   cout << endl;
 }
@@ -104,7 +107,46 @@ TEST(JsonObject, object_deserialize1)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   cout << "original:" << endl << json_str << endl;
-  auto object = make_json_object(istrm, d_config_t());
+  auto object = make_json_record(istrm, d_config_t());
+  cout << "parsed and serialized:" << endl;
   object->serialize(cout);
   cout << endl;
+}
+
+TEST(JsonObject, object_deserialize2)
+{
+  const char* json_str = R"(
+    { "one": 1,
+      "two": { item1 : 0.1, 'item2' : "b" },
+      "three": [ '1', 2, "san" ] }
+)";
+  string_view sv(json_str);
+  string_view_istream istrm(sv);
+  cout << "original:" << endl << json_str << endl;
+  auto record = make_json_record(istrm, d_config_t());
+  ASSERT_TRUE(record->type() == JsonRecord::Type::OBJECT);
+  JsonObject* object = dynamic_cast<JsonObject*>(record.get());
+  ASSERT_FALSE(object == nullptr);
+  auto it3 = object->find("three");
+  ASSERT_TRUE(it3 != object->end());
+  ASSERT_TRUE(it3->second->type() == JsonRecord::Type::ARRAY);
+  JsonArray* array = dynamic_cast<JsonArray*>(it3->second.get());
+  ASSERT_FALSE(array == nullptr);
+  ASSERT_TRUE(array->size() == 3);
+  ASSERT_TRUE(array->at(0).type() == JsonRecord::Type::DATA);
+  ASSERT_TRUE(array->at(1).type() == JsonRecord::Type::DATA);
+}
+
+TEST(JsonObject, DISABLED_array_deserialize_deep_nesting)
+{
+  string json_str;
+  const int depth = 65536;
+  for (int i=0; i<depth; ++i) { json_str += "[\n"; }
+  json_str += " 100 ";
+  for (int i=0; i<depth; ++i) { json_str += "]\n"; }
+  string_view sv(json_str);
+  string_view_istream istrm(sv);
+  auto array = make_json_record(istrm, d_config_t());
+  //array->serialize(cout);
+  //cout << endl;
 }

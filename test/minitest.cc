@@ -209,6 +209,7 @@ TestFilter::operator()(string_view input) const
   auto last = _filter.end();
   if (*(prev(last)) != "*") {
     const string_view& f = *(prev(last));
+    if (f.length() > input.length()) { return false; }
     size_t l_start = input.length() - f.length();
     string_view l_input = input.substr(l_start);
     if (match(l_input, f, true) == 0) { input = input.substr(0, l_start); }

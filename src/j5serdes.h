@@ -58,6 +58,9 @@ make_json_array(std::istream&, const d_config_t& cfg = d_config_t());
 template<typename T>
 JsonDataPtr
 make_json_data(T value);
+template<>
+JsonDataPtr
+make_json_data<const char*>(const char*);
 
 JsonDataPtr
 make_json_data(std::istream&, const d_config_t& cfg);

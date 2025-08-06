@@ -10,6 +10,7 @@ namespace J5Serdes {
 using namespace std;
 
 ////////////////////////////////////////////////////////////////////////////////
+// helper functions
 
 #define assert_msg(cond, msg)            \
   if (!(cond)) {                         \
@@ -46,9 +47,7 @@ __skip_comment(istream& istrm)
       }
     }
   } else {
-    stringstream errss;
-    errss << __func__ << "(): unexpected character `" << c << "' after '/'.";
-    throw runtime_error(errss.str());
+    assert_msg(0, "unexpected character `" << c << "' after '/'.");
   }
 }
 
@@ -91,7 +90,7 @@ static const unordered_map<char, char> __unescape_map = {
 };
 
 static string
-__retrieve_escaped_string(istream& istrm, bool escape_sq = false)
+__retrieve_escaped_string(istream& istrm)
 {
   char c = static_cast<char>(istrm.get());
   if (__unescape_map.count(c)) {
@@ -106,11 +105,8 @@ __retrieve_escaped_string(istream& istrm, bool escape_sq = false)
     char u16[5] = { 0 };
     for (int i=0; i<4; ++i) {
       u16[i] = static_cast<char>(istrm.get());
-      if (!std::isxdigit(u16[i])) {
-        stringstream errss;
-        errss << __func__ << "(): unexpected character `" << u16[i] << "'.";
-        throw runtime_error(errss.str());
-      }
+      assert_msg(std::isxdigit(u16[i]),
+                 "unexpected non-hexadecimal character `" << u16[i] << "'.");
     }
     uint16_t u16_val = std::stoul(u16, nullptr, 16);
     string ret;
@@ -137,11 +133,8 @@ __retrieve_escaped_string(istream& istrm, bool escape_sq = false)
       char u16s[5] = { 0 };
       for (int i=0; i<4; ++i) {
         u16s[i] = static_cast<char>(istrm.get());
-        if (!std::isxdigit(u16s[i])) {
-          stringstream errss;
-          errss << __func__ << "(): unexpected character `" << u16s[i] << "'.";
-          throw runtime_error(errss.str());
-        }
+        assert_msg(std::isxdigit(u16s[i]),
+                   "unexpected non-hexadecimal character `" << u16s[i] << "'.");
       }
       uint16_t u16s_val = std::stoul(u16s, nullptr, 16);
       if (u16s_val < 0xdc00 || u16s_val > 0xdfff) {
@@ -158,10 +151,8 @@ __retrieve_escaped_string(istream& istrm, bool escape_sq = false)
     }
     return ret;
   } else {
-    stringstream errss;
-    errss << __func__ << "(): unexpected escape sequence beginning with "
-                         "character `" << c << "'.";
-    throw runtime_error(errss.str());
+    assert_msg(0, "unexpected escape sequence beginning with character `"
+                  << c << "'.");
   }
   return string();
 }
@@ -170,30 +161,21 @@ string
 __retrieve_quoted_string(istream& istrm)
 {
   char open_quote = istrm.get();
-  if (open_quote != '"' && open_quote != '\'') {
-    stringstream errss;
-    errss << __func__ << "(): unexpected open quote character `"
-          << open_quote << "'.";
-    throw runtime_error(errss.str());
-  }
+  assert_msg(open_quote == '"' || open_quote == '\'',
+             "unexpected openquote character `" << open_quote << "'.");
   string ret;
   bool closed = false;
   while (istrm && !istrm.eof()) {
     char c = istrm.get();
     if (c == '\\') {
-      ret += __retrieve_escaped_string(istrm, open_quote == '\'');
+      ret += __retrieve_escaped_string(istrm);
     } else if (c == open_quote) {
       closed = true; break;
     } else {
       ret += c;
     }
   }
-  if (!closed) {
-    stringstream errss;
-    errss << __func__ << "(): missing closing quote character `"
-          << open_quote << "'.";
-    throw runtime_error(errss.str());
-  }
+  assert_msg(closed, "missing closing quote character `" << open_quote << "'.");
   return ret;
 }
 
@@ -217,6 +199,7 @@ __escape_string(string_view sv, bool in_sq = false)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// implementation class declarations
 
 class DestructionHelperIntf {
 public:
@@ -568,6 +551,8 @@ JsonDataImpl::serialize(ostream& strm, const s_config_t& cfg) const
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 JsonObjectPtr
 make_json_object()
 {
@@ -600,13 +585,12 @@ make_json_data<double>(double);
 template JsonDataPtr
 make_json_data<string_view>(string_view);
 template JsonDataPtr
-make_json_data<const char*>(const char*);
-template JsonDataPtr
 make_json_data<const string&>(const string&);
 template JsonDataPtr
 make_json_data<string>(string);
 
 ////////////////////////////////////////////////////////////////////////////////
+// deserialization functions
 
 enum class JsonDeserializeState : uint8_t {
   OBJECT_OPEN,

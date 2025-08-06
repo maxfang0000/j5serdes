@@ -117,7 +117,7 @@ TEST(JsonObject, object_deserialize2)
 {
   const char* json_str = R"(
     { "one": 1,
-      "two": { item1 : 0.1, 'item2' : "b" },
+      "two": { item1 : 0.3125, 'item2' : "b" },
       "three": [ '1', 2, "san" ] }
 )";
   string_view sv(json_str);
@@ -130,6 +130,14 @@ TEST(JsonObject, object_deserialize2)
   auto it3 = object->find("three");
   ASSERT_TRUE(it3 != object->end());
   ASSERT_TRUE(it3->second->type() == JsonRecord::Type::ARRAY);
+  auto& ent2 = object->at("two");
+  ASSERT_TRUE(ent2.type() == JsonRecord::Type::OBJECT);
+  JsonObject* object2 = dynamic_cast<JsonObject*>(&ent2);
+  ASSERT_FALSE(object2 == nullptr);
+  auto& ent21 = object2->at("item1");
+  ASSERT_TRUE(ent21.type() == JsonRecord::Type::DATA);
+  JsonData* data21 = dynamic_cast<JsonData*>(&ent21);
+  ASSERT_FALSE(data21 == nullptr);
   JsonArray* array = dynamic_cast<JsonArray*>(it3->second.get());
   ASSERT_FALSE(array == nullptr);
   ASSERT_TRUE(array->size() == 3);
@@ -137,7 +145,7 @@ TEST(JsonObject, object_deserialize2)
   ASSERT_TRUE(array->at(1).type() == JsonRecord::Type::DATA);
 }
 
-TEST(JsonObject, DISABLED_array_deserialize_deep_nesting)
+TEST(JsonObject, array_deserialize_deep_nesting)
 {
   string json_str;
   const int depth = 65536;
@@ -148,5 +156,25 @@ TEST(JsonObject, DISABLED_array_deserialize_deep_nesting)
   string_view_istream istrm(sv);
   auto array = make_json_record(istrm, d_config_t());
   //array->serialize(cout);
+  //cout << endl;
+}
+
+TEST(JsonObject, object_deserialize_deep_nesting)
+{
+  string json_str;
+  const int depth = 65536;
+  for (int i=0; i<depth; ++i) {
+    if (i & 1) { json_str += "[\n"; }
+    else       { json_str += "{ object: \n"; }
+  }
+  json_str += " 100 ";
+  for (int i=0; i<depth; ++i) {
+    if (i & 1) { json_str += "}\n"; }
+    else       { json_str += "]\n"; }
+  }
+  string_view sv(json_str);
+  string_view_istream istrm(sv);
+  auto object = make_json_record(istrm, d_config_t());
+  //object->serialize(cout);
   //cout << endl;
 }

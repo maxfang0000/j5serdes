@@ -100,6 +100,9 @@ public:
   virtual iterator                  find(const std::string& key) = 0;
   virtual const_iterator            find(const std::string& key) const = 0;
 
+  virtual JsonRecord&               at(const std::string& key) = 0;
+  virtual const JsonRecord&         at(const std::string& key) const = 0;
+
   virtual iterator                  erase(const_iterator) = 0;
   virtual size_t                    erase(const std::string& key) = 0;
 

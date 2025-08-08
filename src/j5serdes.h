@@ -17,6 +17,10 @@ typedef std::unique_ptr<JsonRecord> JsonRecordPtr;
 typedef std::unique_ptr<JsonObject> JsonObjectPtr;
 typedef std::unique_ptr<JsonArray>  JsonArrayPtr;
 typedef std::unique_ptr<JsonData>   JsonDataPtr;
+typedef std::unique_ptr<const JsonRecord> ConstJsonRecordPtr;
+typedef std::unique_ptr<const JsonObject> ConstJsonObjectPtr;
+typedef std::unique_ptr<const JsonArray>  ConstJsonArrayPtr;
+typedef std::unique_ptr<const JsonData>   ConstJsonDataPtr;
 
 struct d_config_t
 {
@@ -46,14 +50,8 @@ make_json_record(std::istream&, const d_config_t& cfg = d_config_t());
 JsonObjectPtr
 make_json_object();
 
-JsonObjectPtr
-make_json_object(std::istream&, const d_config_t& cfg = d_config_t());
-
 JsonArrayPtr
 make_json_array();
-
-JsonArrayPtr
-make_json_array(std::istream&, const d_config_t& cfg = d_config_t());
 
 template<typename T>
 JsonDataPtr
@@ -74,13 +72,13 @@ public:
   virtual JsonRecordPtr clone() const = 0;
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;
+  virtual JsonArray& as_array() = 0;
+  virtual JsonObject& as_object() = 0;
+  virtual JsonData& as_data() = 0;
+  virtual const JsonArray& as_array() const = 0;
+  virtual const JsonObject& as_object() const = 0;
+  virtual const JsonData& as_data() const = 0;
 };
-
-JsonObject&
-to_object(JsonRecord&);
-
-JsonArray&
-to_array(JsonRecord&);
 
 class JsonObject : public JsonRecord {
 public:
@@ -103,8 +101,8 @@ public:
   virtual iterator                  find(const std::string& key) = 0;
   virtual const_iterator            find(const std::string& key) const = 0;
 
-  virtual JsonRecord&               at(const std::string& key) = 0;
-  virtual const JsonRecord&         at(const std::string& key) const = 0;
+  virtual JsonRecordPtr&            at(const std::string& key) = 0;
+  virtual const JsonRecord*         at(const std::string& key) const = 0;
 
   virtual iterator                  erase(const_iterator) = 0;
   virtual size_t                    erase(const std::string& key) = 0;
@@ -119,6 +117,8 @@ public:
   virtual size_t                    count(const std::string& key) const = 0;
   virtual bool                      empty() const = 0;
   virtual size_t                    size() const = 0;
+
+  virtual JsonRecordPtr&            operator[](const std::string& key) = 0;
 };
 
 class JsonArray : public JsonRecord {
@@ -140,13 +140,16 @@ public:
   virtual iterator          end() = 0;
   virtual const_iterator    end() const = 0;
 
-  virtual JsonRecord&       at(size_t) = 0;
-  virtual const JsonRecord& at(size_t) const = 0;
+  virtual JsonRecordPtr&    at(size_t) = 0;
+  virtual const JsonRecord* at(size_t) const = 0;
 
   virtual void              clear() = 0;
 
   virtual bool              empty() const = 0;
   virtual size_t            size() const = 0;
+
+  virtual JsonRecordPtr&    operator[](size_t) = 0;
+  virtual const JsonRecord* operator[](size_t) const = 0;
 };
 
 class JsonData : public JsonRecord {
@@ -156,6 +159,12 @@ public:
   JsonRecord::Type type() const { return JsonRecord::Type::DATA; }
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;
+
+  virtual std::string_view   as_string() const = 0;
+  virtual bool               as_bool() const = 0;
+  virtual double             as_double() const = 0;
+  virtual long long          as_int() const = 0;
+  virtual unsigned long long as_unsigned() const = 0;
 };
 
 }

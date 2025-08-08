@@ -212,8 +212,6 @@ public:
   JsonObjectImpl() {};
   virtual ~JsonObjectImpl();
 
-  friend JsonObjectPtr make_json_object(istream&, const d_config_t&);
-
 private:
   JsonRecordPtr        clone() const;
   void                 serialize(ostream&, const s_config_t&) const;
@@ -225,8 +223,8 @@ private:
   iterator             find(const string& key);
   const_iterator       find(const string& key) const;
 
-  JsonRecord&          at(const string& key);
-  const JsonRecord&    at(const string& key) const;
+  JsonRecordPtr&       at(const string& key);
+  const JsonRecord*    at(const string& key) const;
 
   iterator             erase(const_iterator);
   size_t               erase(const string& key);
@@ -243,6 +241,15 @@ private:
   bool                 empty() const { return _data.empty(); };
   size_t               size() const { return _data.size(); };
 
+  JsonRecordPtr&       operator[](const string& key);
+
+  JsonObject&          as_object() { return *this; };
+  const JsonObject&    as_object() const { return *this; };
+  JsonArray&           as_array();
+  const JsonArray&     as_array() const;
+  JsonData&            as_data();
+  const JsonData&      as_data() const;
+
   void                 unlink_child_records(deque<DestructionHelperIntf*>&);
 
 private:
@@ -254,8 +261,6 @@ class JsonArrayImpl : public JsonArray, public DestructionHelperIntf {
 public:
   JsonArrayImpl() {};
   virtual ~JsonArrayImpl();
-
-  friend JsonArrayPtr make_json_array(istream&, const d_config_t&);
 
 private:
   JsonRecordPtr     clone() const;
@@ -269,13 +274,23 @@ private:
   iterator          end()         { return _data.end(); };
   const_iterator    end() const   { return _data.end(); };
 
-  JsonRecord&       at(size_t idx)       { return *_data.at(idx); };
-  const JsonRecord& at(size_t idx) const { return *_data.at(idx); };
+  JsonRecordPtr&    at(size_t idx)       { return _data.at(idx); };
+  const JsonRecord* at(size_t idx) const { return _data.at(idx).get(); };
 
   void              clear()       { _data.clear(); };
 
   bool              empty() const { return _data.empty(); };
   size_t            size() const  { return _data.size();  };
+
+  JsonRecordPtr&    operator[](size_t idx)       { return _data.at(idx); };
+  const JsonRecord* operator[](size_t idx) const { return _data.at(idx).get(); };
+
+  JsonArray&          as_array() { return *this; };
+  const JsonArray&    as_array() const { return *this; };
+  JsonObject&         as_object();
+  const JsonObject&   as_object() const;
+  JsonData&           as_data();
+  const JsonData&     as_data() const;
 
   void              unlink_child_records(deque<DestructionHelperIntf*>&);
 
@@ -309,12 +324,25 @@ private:
   JsonRecordPtr clone() const;
   void          serialize(ostream&, const s_config_t&) const;
 
+  string_view         as_string() const;
+  bool                as_bool() const;
+  double              as_double() const;
+  long long           as_int() const;
+  unsigned long long  as_unsigned() const;
+
+  JsonData&           as_data() { return *this; };
+  const JsonData&     as_data() const { return *this; };
+  JsonObject&         as_object();
+  const JsonObject&   as_object() const;
+  JsonArray&          as_array();
+  const JsonArray&    as_array() const;
+
   void          unlink_child_records(deque<DestructionHelperIntf*>&) {};
 
 private:
-  uint64_t   _long_buf;
-  string     _string_buf;
-  NativeType _native_type;
+  uint64_t       _long_buf;
+  mutable string _string_buf;
+  NativeType     _native_type;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -426,16 +454,16 @@ JsonObjectImpl::find(const string& key) const
   return _map.find(key)->second;
 }
 
-JsonRecord&
+JsonRecordPtr&
 JsonObjectImpl::at(const string& key)
 {
-  return *((*(_map.at(key))).second);
+  return (*(_map.at(key))).second;
 }
 
-const JsonRecord&
+const JsonRecord*
 JsonObjectImpl::at(const string& key) const
 {
-  return *((*(_map.at(key))).second);
+  return (*(_map.at(key))).second.get();
 }
 
 JsonObject::iterator
@@ -453,6 +481,15 @@ JsonObjectImpl::erase(const string& key)
   _data.erase(mit->second);
   _map.erase(mit);
   return 1;
+}
+
+JsonRecordPtr&
+JsonObjectImpl::operator[](const string& key)
+{
+  if (_map.count(key) == 0) {
+    insert(value_type(key, unique_ptr<JsonRecord>()));
+  }
+  return at(key);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -551,6 +588,110 @@ JsonDataImpl::serialize(ostream& strm, const s_config_t& cfg) const
   }
 }
 
+string_view
+JsonDataImpl::as_string() const
+{
+  switch (_native_type) {
+  case NativeType::NONE:
+    return "null";
+  case NativeType::BOOL:
+    return _long_buf ? "true" : "false";
+  case NativeType::STRING:
+    break;
+  case NativeType::FLOAT:
+    _string_buf = to_string(*reinterpret_cast<const double*>(&_long_buf));
+    break;
+  case NativeType::INT:
+    _string_buf = to_string(*reinterpret_cast<const int64_t*>(&_long_buf));
+    break;
+  default:
+    throw runtime_error("JsonData::as_string(): unknown native type.");
+  }
+  return _string_buf;
+}
+
+bool
+JsonDataImpl::as_bool() const
+{
+  switch (_native_type) {
+  case NativeType::NONE:
+    return false;
+  case NativeType::BOOL:
+    return _long_buf ? true : false;
+  case NativeType::FLOAT:
+    return *reinterpret_cast<const double*>(&_long_buf) != 0.;
+  case NativeType::INT:
+    return _long_buf != 0;
+  case NativeType::STRING:
+    if (_string_buf == "true" || _string_buf == "True") { return true; }
+    else if (_string_buf == "false" || _string_buf == "False") { return false; }
+    return as_int() != 0;
+  default:
+    throw runtime_error("JsonData::as_bool(): unknown native type.");
+  }
+  return false;
+}
+
+double
+JsonDataImpl::as_double() const
+{
+  switch (_native_type) {
+  case NativeType::NONE:
+    return 0.;
+  case NativeType::BOOL:
+    return _long_buf ? 1. : 0.;
+  case NativeType::FLOAT:
+    return *reinterpret_cast<const double*>(&_long_buf);
+  case NativeType::INT:
+    return static_cast<double>(*reinterpret_cast<const int64_t*>(&_long_buf));
+  case NativeType::STRING:
+    return stod(_string_buf);
+  default:
+    throw runtime_error("JsonData::as_double(): unknown native type.");
+  }
+  return 0.;
+}
+
+long long
+JsonDataImpl::as_int() const
+{
+  switch (_native_type) {
+  case NativeType::NONE:
+    return 0;
+  case NativeType::BOOL:
+    return _long_buf ? 1 : 0;
+  case NativeType::FLOAT:
+    return static_cast<long long>(*reinterpret_cast<const double*>(&_long_buf));
+  case NativeType::INT:
+    return *reinterpret_cast<const int64_t*>(&_long_buf);
+  case NativeType::STRING:
+    return stoll(_string_buf);
+  default:
+    throw runtime_error("JsonData::as_int(): unknown native type.");
+  }
+  return 0;
+}
+
+unsigned long long
+JsonDataImpl::as_unsigned() const
+{
+  switch (_native_type) {
+  case NativeType::NONE:
+    return 0;
+  case NativeType::BOOL:
+    return _long_buf ? 1 : 0;
+  case NativeType::FLOAT:
+    return static_cast<uint64_t>(*reinterpret_cast<const double*>(&_long_buf));
+  case NativeType::INT:
+    return *reinterpret_cast<const uint64_t*>(&_long_buf);
+  case NativeType::STRING:
+    return stoull(_string_buf);
+  default:
+    throw runtime_error("JsonData::as_unsigned(): unknown native type.");
+  }
+  return 0;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 JsonObjectPtr
@@ -590,7 +731,83 @@ template JsonDataPtr
 make_json_data<string>(string);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+#define DISABLE_CONVERSION(dest, Dest, Src)                                    \
+  Json ## Dest & Json ## Src ## Impl::as_ ## dest()                            \
+  { throw runtime_error("Json" #Src "::as_" #dest "() is not allowed."); }     \
+  const Json ## Dest & Json ## Src ## Impl::as_ ## dest() const                \
+  { throw runtime_error("Json" #Src "::as_" #dest "() is not allowed."); }
+
+DISABLE_CONVERSION(array, Array, Object);
+DISABLE_CONVERSION(data, Data, Object);
+DISABLE_CONVERSION(object, Object, Array);
+DISABLE_CONVERSION(data, Data, Array);
+DISABLE_CONVERSION(object, Object, Data);
+DISABLE_CONVERSION(array, Array, Data);
+
+#undef DISABLE_CONVERSION
+
+////////////////////////////////////////////////////////////////////////////////
 // deserialization functions
+
+JsonDataPtr
+make_json_data(istream& istrm, const d_config_t& cfg)
+{
+  // Skip leading whitespace characters in the input stream
+  __skip_no_parse(istrm);
+  if (istrm.eof()) {
+    return JsonDataPtr();  /* return nullptr if nothing matched */
+  }
+  unique_ptr<JsonDataImpl> ret = make_unique<JsonDataImpl>();
+  if (istrm.peek() == '"' || istrm.peek() == '\'') {
+    ret->_string_buf = __retrieve_quoted_string(istrm);
+    ret->_native_type = JsonDataImpl::NativeType::STRING;
+    ret->_long_buf = 0;
+  } else {
+    // read till a separator
+    string token;
+    while (istrm && !istrm.eof()) {
+      char c = istrm.peek();
+      if (std::isspace(c) || c == ',' || c == ']' || c == '}') { break; }
+      token += static_cast<char>(istrm.get());
+    }
+    if (token.empty()) {
+      return JsonDataPtr();  /* return nullptr if nothing matched */
+    }
+    if (token == "null") {
+      ret->_native_type = JsonDataImpl::NativeType::NONE;
+      ret->_long_buf = 0;
+    } else if (token == "true") {
+      ret->_native_type = JsonDataImpl::NativeType::BOOL;
+      ret->_long_buf = 1;
+    } else if (token == "false") {
+      ret->_native_type = JsonDataImpl::NativeType::BOOL;
+      ret->_long_buf = 0;
+    } else {
+      if (token[0] == '+') {
+        assert_msg(token.size() > 1, "unexpected token `+' without a number.");
+        assert_msg(token[1] != '-', "unexpected token `+-'.");
+        token = token.substr(1);
+      }
+      if (token.find(".") != string::npos) {
+        ret->_native_type = JsonDataImpl::NativeType::FLOAT;
+        size_t after_pos = 0;
+        double d = stod(token, &after_pos);
+        assert_msg(after_pos == token.size(), "unexpected trailing characters "
+                   "after floating point number.");
+        ret->_long_buf = *(reinterpret_cast<const uint64_t*>(&d));
+      } else {
+        ret->_native_type = JsonDataImpl::NativeType::INT;
+        size_t after_pos = 0;
+        int64_t i = stoll(token, &after_pos, 0);
+        assert_msg(after_pos == token.size(), "unexpected trailing characters "
+                   "after integer number.");
+        ret->_long_buf = *(reinterpret_cast<const uint64_t*>(&i));
+      }
+    }
+  }
+  return ret;
+}
 
 enum class JsonDeserializeState : uint8_t {
   OBJECT_OPEN,
@@ -825,65 +1042,6 @@ make_json_record(istream& istrm, const d_config_t& cfg)
           job_stack.top().state == JsonDeserializeState::OBJECT_KEY)
       { handle_object_key(istrm, cfg, job_stack, ret); }
       else { handle_data(istrm, cfg, job_stack, ret); }
-    }
-  }
-  return ret;
-}
-
-JsonDataPtr
-make_json_data(istream& istrm, const d_config_t& cfg)
-{
-  // Skip leading whitespace characters in the input stream
-  __skip_no_parse(istrm);
-  if (istrm.eof()) {
-    return JsonDataPtr();  /* return nullptr if nothing matched */
-  }
-  unique_ptr<JsonDataImpl> ret = make_unique<JsonDataImpl>();
-  if (istrm.peek() == '"' || istrm.peek() == '\'') {
-    ret->_string_buf = __retrieve_quoted_string(istrm);
-    ret->_native_type = JsonDataImpl::NativeType::STRING;
-    ret->_long_buf = 0;
-  } else {
-    // read till a separator
-    string token;
-    while (istrm && !istrm.eof()) {
-      char c = istrm.peek();
-      if (std::isspace(c) || c == ',' || c == ']' || c == '}') { break; }
-      token += static_cast<char>(istrm.get());
-    }
-    if (token.empty()) {
-      return JsonDataPtr();  /* return nullptr if nothing matched */
-    }
-    if (token == "null") {
-      ret->_native_type = JsonDataImpl::NativeType::NONE;
-      ret->_long_buf = 0;
-    } else if (token == "true") {
-      ret->_native_type = JsonDataImpl::NativeType::BOOL;
-      ret->_long_buf = 1;
-    } else if (token == "false") {
-      ret->_native_type = JsonDataImpl::NativeType::BOOL;
-      ret->_long_buf = 0;
-    } else {
-      if (token[0] == '+') {
-        assert_msg(token.size() > 1, "unexpected token `+' without a number.");
-        assert_msg(token[1] != '-', "unexpected token `+-'.");
-        token = token.substr(1);
-      }
-      if (token.find(".") != string::npos) {
-        ret->_native_type = JsonDataImpl::NativeType::FLOAT;
-        size_t after_pos = 0;
-        double d = stod(token, &after_pos);
-        assert_msg(after_pos == token.size(), "unexpected trailing characters "
-                   "after floating point number.");
-        ret->_long_buf = *(reinterpret_cast<const uint64_t*>(&d));
-      } else {
-        ret->_native_type = JsonDataImpl::NativeType::INT;
-        size_t after_pos = 0;
-        int64_t i = stoll(token, &after_pos, 0);
-        assert_msg(after_pos == token.size(), "unexpected trailing characters "
-                   "after integer number.");
-        ret->_long_buf = *(reinterpret_cast<const uint64_t*>(&i));
-      }
     }
   }
   return ret;

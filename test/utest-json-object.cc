@@ -1,5 +1,6 @@
 #include "minitest.h"
 #include "j5serdes.h"
+#include <cstring>
 #include <iostream>
 #include <streambuf>
 #include <istream>
@@ -10,18 +11,32 @@ using namespace std;
 
 TEST(JsonObject, basic_ops)
 {
-  JsonRecordPtr two = make_json_data(std::string("two"));
-  auto root = make_json_object();
-  auto array = make_json_array();
-  array->push_back(make_json_data(true));
-  array->push_back(two);
-  array->push_back(make_json_data("three"));
-  root->insert({ "one"  , make_json_data(1.) });
-  root->insert(  "two"  , two );
-  root->insert(  "three", std::move(array) );
-  cout << root->size() << endl;
-  root->serialize(cout, s_config_t());
-  cout << endl;
+  try {
+    JsonRecordPtr two = make_json_data(std::string("two"));
+    auto root = make_json_object();
+    auto array = make_json_array();
+    array->push_back(make_json_data(true));
+    array->push_back(two);
+    array->push_back(make_json_data("three"));
+    root->insert({ "one"  , make_json_data(1.) });
+    root->insert(  "two"  , two );
+    root->insert(  "three", std::move(array) );
+    cout << root->size() << endl;
+    root->serialize(cout, s_config_t());
+    cout << endl;
+    root->at("one") = make_json_data("ONE");
+    (*root)["two"] = make_json_data(2.);
+    (*root)["four"] = make_json_array();
+    (*root)["four"]->as_array().push_back(make_json_data(1.0));
+    (*root)["four"]->as_array().push_back(make_json_data(2.0));
+    (*root)["four"]->as_array().push_back(make_json_data(3.0));
+    (*root)["four"]->as_array().push_back(make_json_data(4.0));
+    root->serialize(cout, s_config_t());
+    cout << endl;
+  } catch (const runtime_error& e) {
+    cout << "error: " << e.what() << endl;
+    ASSERT_TRUE(false);
+  }
 }
 
 class string_view_istream : public istream {
@@ -123,26 +138,30 @@ TEST(JsonObject, object_deserialize2)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   cout << "original:" << endl << json_str << endl;
-  auto record = make_json_record(istrm, d_config_t());
-  ASSERT_TRUE(record->type() == JsonRecord::Type::OBJECT);
-  JsonObject* object = dynamic_cast<JsonObject*>(record.get());
-  ASSERT_FALSE(object == nullptr);
-  auto it3 = object->find("three");
-  ASSERT_TRUE(it3 != object->end());
-  ASSERT_TRUE(it3->second->type() == JsonRecord::Type::ARRAY);
-  auto& ent2 = object->at("two");
-  ASSERT_TRUE(ent2.type() == JsonRecord::Type::OBJECT);
-  JsonObject* object2 = dynamic_cast<JsonObject*>(&ent2);
-  ASSERT_FALSE(object2 == nullptr);
-  auto& ent21 = object2->at("item1");
-  ASSERT_TRUE(ent21.type() == JsonRecord::Type::DATA);
-  JsonData* data21 = dynamic_cast<JsonData*>(&ent21);
-  ASSERT_FALSE(data21 == nullptr);
-  JsonArray* array = dynamic_cast<JsonArray*>(it3->second.get());
-  ASSERT_FALSE(array == nullptr);
-  ASSERT_TRUE(array->size() == 3);
-  ASSERT_TRUE(array->at(0).type() == JsonRecord::Type::DATA);
-  ASSERT_TRUE(array->at(1).type() == JsonRecord::Type::DATA);
+  try {
+    auto record = make_json_record(istrm);
+    ASSERT_TRUE(record->type() == JsonRecord::Type::OBJECT);
+    auto& object = record->as_object();
+    auto it3 = object.find("three");
+    ASSERT_TRUE(it3 != object.end());
+    ASSERT_TRUE(it3->second->type() == JsonRecord::Type::ARRAY);
+    ASSERT_TRUE(object.at("two")->type() == JsonRecord::Type::OBJECT);
+    auto& object2 = object.at("two")->as_object();
+    auto& ent21 = object2.at("item1")->as_data();
+    ASSERT_TRUE(ent21.type() == JsonRecord::Type::DATA);
+    ASSERT_TRUE(ent21.as_double() == 0.3125);
+    ASSERT_TRUE(strncmp(ent21.as_string().data(), "0.3125", 6) == 0);
+    ASSERT_TRUE(ent21.as_bool() == true);
+    ASSERT_TRUE(ent21.as_int() == 0);
+    ASSERT_TRUE(ent21.as_unsigned() == 0);
+    auto& array = it3->second->as_array();
+    ASSERT_TRUE(array.size() == 3);
+    ASSERT_TRUE(array[0]->type() == JsonRecord::Type::DATA);
+    ASSERT_TRUE(array[1]->type() == JsonRecord::Type::DATA);
+  } catch (const runtime_error& e) {
+    cout << "error: " << e.what() << endl;
+    ASSERT_TRUE(false);
+  }
 }
 
 TEST(JsonObject, array_deserialize_deep_nesting)

@@ -17,10 +17,6 @@ typedef std::unique_ptr<JsonRecord> JsonRecordPtr;
 typedef std::unique_ptr<JsonObject> JsonObjectPtr;
 typedef std::unique_ptr<JsonArray>  JsonArrayPtr;
 typedef std::unique_ptr<JsonData>   JsonDataPtr;
-typedef std::unique_ptr<const JsonRecord> ConstJsonRecordPtr;
-typedef std::unique_ptr<const JsonObject> ConstJsonObjectPtr;
-typedef std::unique_ptr<const JsonArray>  ConstJsonArrayPtr;
-typedef std::unique_ptr<const JsonData>   ConstJsonDataPtr;
 
 struct d_config_t
 {
@@ -34,12 +30,10 @@ struct s_config_t
 {
   int  global_indentation;
   int  indentation_width;
-  int  maximum_width;
   bool strict_json;
   s_config_t()
     : global_indentation(0),
       indentation_width(2),
-      maximum_width(-1),
       strict_json(false)
   {};
 };
@@ -53,6 +47,9 @@ make_json_object();
 JsonArrayPtr
 make_json_array();
 
+JsonDataPtr
+make_json_data();
+
 template<typename T>
 JsonDataPtr
 make_json_data(T value);
@@ -60,8 +57,22 @@ template<>
 JsonDataPtr
 make_json_data<const char*>(const char*);
 
-JsonDataPtr
-make_json_data(std::istream&, const d_config_t& cfg);
+void
+write_json_text(std::ostream&, const JsonRecord*,
+                const s_config_t& cfg = s_config_t());
+
+void
+write_json_text(std::ostream&, const JsonRecordPtr&,
+                const s_config_t& cfg = s_config_t());
+void
+write_json_text(std::ostream&, const JsonObjectPtr&,
+                const s_config_t& cfg = s_config_t());
+void
+write_json_text(std::ostream&, const JsonArrayPtr&,
+                const s_config_t& cfg = s_config_t());
+void
+write_json_text(std::ostream&, const JsonDataPtr&,
+                const s_config_t& cfg = s_config_t());
 
 class JsonRecord {
 public:
@@ -84,6 +95,8 @@ class JsonObject : public JsonRecord {
 public:
   JsonObject() {};
   virtual ~JsonObject() {};
+  virtual JsonObject& operator=(const JsonObject&) = 0;
+  virtual JsonObject& operator=(JsonObject&&) = 0;
   JsonRecord::Type type() const { return JsonRecord::Type::OBJECT; };
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;
@@ -125,6 +138,8 @@ class JsonArray : public JsonRecord {
 public:
   JsonArray() {};
   virtual ~JsonArray() {};
+  virtual JsonArray& operator=(const JsonArray&) = 0;
+  virtual JsonArray& operator=(JsonArray&&) = 0;
   JsonRecord::Type type() const { return JsonRecord::Type::ARRAY; }
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;

@@ -31,7 +31,19 @@ TEST(JsonObject, basic_ops)
     (*root)["four"]->as_array().push_back(make_json_data(2.0));
     (*root)["four"]->as_array().push_back(make_json_data(3.0));
     (*root)["four"]->as_array().push_back(make_json_data(4.0));
-    root->serialize(cout, s_config_t());
+    (*root)["four"]->as_array().push_back(make_json_data());
+    auto object = make_json_object();
+    object->insert({ "a", make_json_data(1.) });
+    object->insert({ "b", make_json_array() });
+    object->insert({ "c", make_json_object() });
+    (*root)["five"] = object->clone();
+    write_json_text(cout, root);
+    cout << endl;
+    write_json_text(cout, object);
+    cout << endl;
+    auto object2 = make_json_object();
+    *object2 = *object;
+    write_json_text(cout, object2);
     cout << endl;
   } catch (const runtime_error& e) {
     cout << "error: " << e.what() << endl;
@@ -158,6 +170,9 @@ TEST(JsonObject, object_deserialize2)
     ASSERT_TRUE(array.size() == 3);
     ASSERT_TRUE(array[0]->type() == JsonRecord::Type::DATA);
     ASSERT_TRUE(array[1]->type() == JsonRecord::Type::DATA);
+    cout << "parsed and serialized:" << endl;
+    write_json_text(cout, record);
+    cout << endl;
   } catch (const runtime_error& e) {
     cout << "error: " << e.what() << endl;
     ASSERT_TRUE(false);

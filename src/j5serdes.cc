@@ -1,9 +1,11 @@
 #include "j5serdes.h"
 #include <deque>
 #include <functional>
+#include <iomanip>
 #include <sstream>
 #include <stack>
 #include <unordered_map>
+#include <variant>
 
 namespace J5Serdes {
 
@@ -210,7 +212,11 @@ public:
 class JsonObjectImpl : public JsonObject, public DestructionHelperIntf {
 public:
   JsonObjectImpl() {};
+  JsonObjectImpl(const JsonObjectImpl&);
+  JsonObjectImpl(JsonObjectImpl&&);
   virtual ~JsonObjectImpl();
+  JsonObject& operator=(const JsonObject&);
+  JsonObject& operator=(JsonObject&&);
 
 private:
   JsonRecordPtr        clone() const;
@@ -260,6 +266,10 @@ private:
 class JsonArrayImpl : public JsonArray, public DestructionHelperIntf {
 public:
   JsonArrayImpl() {};
+  JsonArrayImpl(const JsonArrayImpl&);
+  JsonArrayImpl(JsonArrayImpl&&);
+  JsonArray& operator=(const JsonArray&);
+  JsonArray& operator=(JsonArray&&);
   virtual ~JsonArrayImpl();
 
 private:
@@ -285,12 +295,12 @@ private:
   JsonRecordPtr&    operator[](size_t idx)       { return _data.at(idx); };
   const JsonRecord* operator[](size_t idx) const { return _data.at(idx).get(); };
 
-  JsonArray&          as_array() { return *this; };
-  const JsonArray&    as_array() const { return *this; };
-  JsonObject&         as_object();
-  const JsonObject&   as_object() const;
-  JsonData&           as_data();
-  const JsonData&     as_data() const;
+  JsonArray&        as_array() { return *this; };
+  const JsonArray&  as_array() const { return *this; };
+  JsonObject&       as_object();
+  const JsonObject& as_object() const;
+  JsonData&         as_data();
+  const JsonData&   as_data() const;
 
   void              unlink_child_records(deque<DestructionHelperIntf*>&);
 
@@ -310,19 +320,27 @@ public:
   JsonDataImpl() : _native_type(NativeType::NONE) {};
   JsonDataImpl(double value) : _native_type(NativeType::FLOAT)
     { *reinterpret_cast<double*>(&_long_buf) = value; };
+  JsonDataImpl(int64_t value) : _native_type(NativeType::INT),
+                                _long_buf(value) {};
+  JsonDataImpl(uint64_t value) : _native_type(NativeType::INT),
+                                 _long_buf(value) {};
+  JsonDataImpl(int value) : _native_type(NativeType::INT),
+                            _long_buf(value) {};
+  JsonDataImpl(unsigned value) : _native_type(NativeType::INT),
+                                 _long_buf(value) {};
   JsonDataImpl(string_view value) : _native_type(NativeType::STRING),
-                                    _string_buf(value), _long_buf(0)
-    { };
+                                    _string_buf(value), _long_buf(0) {};
   JsonDataImpl(bool value) : _native_type(NativeType::BOOL),
-                             _long_buf(value ? 1 : 0)
-    { };
-  virtual ~JsonDataImpl() {};
+                             _long_buf(value ? 1 : 0) {};
+  virtual ~JsonDataImpl() = default;
 
-  friend JsonDataPtr make_json_data(istream&, const d_config_t&);
+  friend JsonDataPtr  make_json_data(istream&, const d_config_t&);
+  friend void         write_json_data_text(ostream&, const JsonData*,
+                                           const s_config_t&);
 
 private:
-  JsonRecordPtr clone() const;
-  void          serialize(ostream&, const s_config_t&) const;
+  JsonRecordPtr       clone() const;
+  void                serialize(ostream&, const s_config_t&) const;
 
   string_view         as_string() const;
   bool                as_bool() const;
@@ -337,15 +355,61 @@ private:
   JsonArray&          as_array();
   const JsonArray&    as_array() const;
 
-  void          unlink_child_records(deque<DestructionHelperIntf*>&) {};
+  void                unlink_child_records(deque<DestructionHelperIntf*>&) {};
 
 private:
-  uint64_t       _long_buf;
-  mutable string _string_buf;
-  NativeType     _native_type;
+  uint64_t            _long_buf;
+  mutable string      _string_buf;
+  NativeType          _native_type;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+JsonObjectImpl::JsonObjectImpl(const JsonObjectImpl& src)
+{
+  for (auto it=src._data.begin(); it!=src._data.end(); ++it) {
+    _data.push_back({ it->first, it->second->clone() });
+    _map.insert({ it->first, prev(_data.end()) });
+  }
+}
+
+JsonObjectImpl::JsonObjectImpl(JsonObjectImpl&& src)
+  : _data(std::move(src._data))
+{
+  src._data.clear();
+  src._map.clear();
+  for (auto it=_data.begin(); it!=_data.end(); ++it) {
+    _map.insert({ it->first, it });
+  }
+}
+
+JsonObject&
+JsonObjectImpl::operator=(const JsonObject& src)
+{
+  _map.clear();
+  _data.clear();
+  const JsonObjectImpl& src_impl = static_cast<const JsonObjectImpl&>(src);
+  for (auto& entry : src_impl._data) {
+    _data.push_back({ entry.first, entry.second->clone() });
+    _map.insert({ entry.first, prev(_data.end()) });
+  }
+  return *this;
+}
+
+JsonObject&
+JsonObjectImpl::operator=(JsonObject&& src)
+{
+  _map.clear();
+  _data.clear();
+  JsonObjectImpl&& src_impl = static_cast<JsonObjectImpl&&>(src);
+  _data = std::move(src_impl._data);
+  for (auto it=_data.begin(); it!=_data.end(); ++it) {
+    _map.insert({ it->first, it });
+  }
+  src_impl._data.clear();
+  src_impl._map.clear();
+  return *this;
+}
 
 JsonObjectImpl::~JsonObjectImpl()
 {
@@ -403,19 +467,7 @@ JsonObjectImpl::clone() const
 void
 JsonObjectImpl::serialize(ostream& strm, const s_config_t& cfg) const
 {
-  strm << '{' << endl;
-  s_config_t cfg_next = cfg;
-  cfg_next.global_indentation += cfg.indentation_width;
-  bool first = true;
-  for (const auto& entry : _data) {
-    if (first) { first = false; } else { strm << ',' << endl; }
-    __put_spaces(strm, cfg_next.global_indentation);
-    strm << '"' << entry.first << "\" : ";
-    entry.second->serialize(strm, cfg_next);
-  }
-  strm << endl;
-  __put_spaces(strm, cfg.global_indentation);
-  strm << '}';
+  write_json_text(strm, this, cfg);
 }
 
 pair<JsonObject::iterator, bool>
@@ -494,6 +546,29 @@ JsonObjectImpl::operator[](const string& key)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+JsonArrayImpl::JsonArrayImpl(const JsonArrayImpl& src)
+{
+  for (auto& entry : src._data) { _data.push_back(entry->clone()); }
+}
+
+JsonArray&
+JsonArrayImpl::operator=(const JsonArray& src)
+{
+  _data.clear();
+  const JsonArrayImpl& src_impl = static_cast<const JsonArrayImpl&>(src);
+  for (auto& entry : src_impl._data) { _data.push_back(entry->clone()); }
+  return *this;
+}
+
+JsonArray&
+JsonArrayImpl::operator=(JsonArray&& src)
+{
+  _data.clear();
+  JsonArrayImpl&& src_impl = static_cast<JsonArrayImpl&&>(src);
+  _data = std::move(src_impl._data);
+  return *this;
+}
+
 void
 JsonArrayImpl::unlink_child_records(deque<DestructionHelperIntf*>& ptrs)
 {
@@ -529,19 +604,7 @@ JsonArrayImpl::clone() const
 void
 JsonArrayImpl::serialize(ostream& strm, const s_config_t& cfg) const
 {
-  strm << '[' << endl;
-  s_config_t cfg_next = cfg;
-  cfg_next.global_indentation += cfg.indentation_width;
-  bool first = true;
-  for (const auto& item : _data) {
-    if (first) { first = false; }
-    else       { strm << ',' << endl; }
-    __put_spaces(strm, cfg_next.global_indentation);
-    item->serialize(strm, cfg_next);
-  }
-  strm << endl;
-  __put_spaces(strm, cfg.global_indentation);
-  strm << ']';
+  write_json_text(strm, this, cfg);
 }
 
 void
@@ -567,25 +630,7 @@ JsonDataImpl::clone() const
 void
 JsonDataImpl::serialize(ostream& strm, const s_config_t& cfg) const
 {
-  switch (_native_type) {
-  case NativeType::NONE:
-    strm << "null";
-    break;
-  case NativeType::FLOAT:
-    strm << *reinterpret_cast<const double*>(&_long_buf);
-    break;
-  case NativeType::INT:
-    strm << *reinterpret_cast<const int64_t*>(&_long_buf);
-    break;
-  case NativeType::BOOL:
-    strm << (_long_buf ? "true" : "false");
-    break;
-  case NativeType::STRING:
-    strm << '"' << __escape_string(_string_buf) << '"';
-    break;
-  default:
-    throw runtime_error("JsonData::serialize(): unknown native type.");
-  }
+  write_json_text(strm, this, cfg);
 }
 
 string_view
@@ -706,6 +751,12 @@ make_json_array()
   return make_unique<JsonArrayImpl>();
 }
 
+JsonDataPtr
+make_json_data()
+{
+  return make_unique<JsonDataImpl>();
+}
+
 template<typename T>
 JsonDataPtr
 make_json_data(T value)
@@ -723,6 +774,14 @@ template JsonDataPtr
 make_json_data<bool>(bool);
 template JsonDataPtr
 make_json_data<double>(double);
+template JsonDataPtr
+make_json_data<int64_t>(int64_t);
+template JsonDataPtr
+make_json_data<uint64_t>(uint64_t);
+template JsonDataPtr
+make_json_data<int>(int);
+template JsonDataPtr
+make_json_data<unsigned>(unsigned);
 template JsonDataPtr
 make_json_data<string_view>(string_view);
 template JsonDataPtr
@@ -1035,8 +1094,9 @@ make_json_record(istream& istrm, const d_config_t& cfg)
     __skip_no_parse(istrm);
     if (istrm.eof()) { break; }
     char c = istrm.peek();
-    if (__des_handlers.count(c)) {
-      __des_handlers.at(c)(istrm, cfg, job_stack, ret);
+    auto it = __des_handlers.find(c);
+    if (it != __des_handlers.end()) {
+      it->second(istrm, cfg, job_stack, ret);
     } else {
       if (!job_stack.empty() &&
           job_stack.top().state == JsonDeserializeState::OBJECT_KEY)
@@ -1045,6 +1105,131 @@ make_json_record(istream& istrm, const d_config_t& cfg)
     }
   }
   return ret;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// serialization functions
+
+void
+write_json_data_text(ostream& ostrm, const JsonData* data,
+                     const s_config_t& cfg)
+{
+  const JsonDataImpl* data_impl = static_cast<const JsonDataImpl*>(data);
+  switch (data_impl->_native_type) {
+  case JsonDataImpl::NativeType::NONE:
+    ostrm << "null";
+    break;
+  case JsonDataImpl::NativeType::BOOL:
+    ostrm << (data_impl->_long_buf ? "true" : "false");
+    break;
+  case JsonDataImpl::NativeType::INT:
+    ostrm << *reinterpret_cast<const int64_t*>(&data_impl->_long_buf);
+    break;
+  case JsonDataImpl::NativeType::FLOAT:
+    ostrm << defaultfloat << setprecision(10);
+    ostrm << *reinterpret_cast<const double*>(&data_impl->_long_buf);
+    break;
+  case JsonDataImpl::NativeType::STRING:
+    ostrm << '"' << __escape_string(data_impl->_string_buf) << '"';
+    break;
+  default:
+    assert_msg(0, "corrupted JsonData native data type.");
+  }
+}
+
+struct ser_job_state_t {
+  const JsonRecord* record;
+  variant<monostate, JsonObject::const_iterator, JsonArray::const_iterator> it;
+  ser_job_state_t(const JsonRecord* r_) : record(r_), it(monostate()) {};
+  ser_job_state_t() : record(nullptr), it(monostate()) {};
+};
+
+void
+write_json_text(ostream& ostrm, const JsonRecord* record, const s_config_t& cfg)
+{
+  std::stack<ser_job_state_t> job_stack;
+  job_stack.push({ record });
+  while (!job_stack.empty()) {
+    auto& active_job = job_stack.top();
+    int curr_indent = cfg.global_indentation
+                        + cfg.indentation_width * (job_stack.size() - 1);
+    switch (active_job.record->type()) {
+    case JsonRecord::Type::OBJECT:
+      {
+        const JsonObject& obj = active_job.record->as_object();
+        if (holds_alternative<monostate>(active_job.it)) {
+          active_job.it = obj.begin();
+          ostrm << '{' << endl;
+        }
+        auto& it = get<JsonObject::const_iterator>(active_job.it);
+        if (it == obj.end()) {
+          ostrm << endl;
+          __put_spaces(ostrm, curr_indent);
+          ostrm << '}';
+          job_stack.pop();
+        } else {
+          if (it != obj.begin()) { ostrm << ',' << endl; }
+          __put_spaces(ostrm, curr_indent + cfg.indentation_width);
+          ostrm << '"' << it->first << '"' << " : ";
+          job_stack.push({ it->second.get() });
+          ++ it;
+        }
+      }
+      break;
+    case JsonRecord::Type::ARRAY:
+      {
+        const JsonArray& arr = active_job.record->as_array();
+        if (holds_alternative<monostate>(active_job.it)) {
+          active_job.it = arr.begin();
+          ostrm << '[' << endl;
+        }
+        auto& it = get<JsonArray::const_iterator>(active_job.it);
+        if (it == arr.end()) {
+          ostrm << endl;
+          __put_spaces(ostrm, curr_indent);
+          ostrm << ']';
+          job_stack.pop();
+        } else {
+          if (it != arr.begin()) { ostrm << ',' << endl; }
+          __put_spaces(ostrm, curr_indent + cfg.indentation_width);
+          job_stack.push({ it->get() });
+          ++ it;
+        }
+      }
+      break;
+    case JsonRecord::Type::DATA:
+      write_json_data_text(ostrm, &active_job.record->as_data(), cfg);
+      job_stack.pop();
+      break;
+    default:
+      assert_msg(0, "corrupted json record type.");
+    }
+  }
+}
+
+void
+write_json_text(ostream& ostrm, const JsonRecordPtr& record,
+                const s_config_t& cfg)
+{
+  write_json_text(ostrm, record.get(), cfg);
+}
+void
+write_json_text(ostream& ostrm, const JsonObjectPtr& record,
+                const s_config_t& cfg)
+{
+  write_json_text(ostrm, record.get(), cfg);
+}
+void
+write_json_text(ostream& ostrm, const JsonArrayPtr& record,
+                const s_config_t& cfg)
+{
+  write_json_text(ostrm, record.get(), cfg);
+}
+void
+write_json_text(ostream& ostrm, const JsonDataPtr& record,
+                const s_config_t& cfg)
+{
+  record->serialize(ostrm, cfg);
 }
 
 }

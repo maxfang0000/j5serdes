@@ -77,8 +77,7 @@ write_json_text(std::ostream&, const JsonDataPtr&,
 class JsonRecord {
 public:
   enum class Type : unsigned int { OBJECT = 0, ARRAY = 1, DATA = 2 };
-  JsonRecord() {};
-  virtual ~JsonRecord() {};
+  virtual ~JsonRecord() = default;
   virtual Type type() const = 0;
   virtual JsonRecordPtr clone() const = 0;
   virtual void serialize(std::ostream&,
@@ -93,17 +92,16 @@ public:
 
 class JsonObject : public JsonRecord {
 public:
-  JsonObject() {};
-  virtual ~JsonObject() {};
+  virtual ~JsonObject() = default;
   virtual JsonObject& operator=(const JsonObject&) = 0;
   virtual JsonObject& operator=(JsonObject&&) = 0;
   JsonRecord::Type type() const { return JsonRecord::Type::OBJECT; };
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;
 
-  typedef std::pair<std::string, JsonRecordPtr>       value_type;
-  typedef std::list<value_type>::iterator             iterator;
-  typedef std::list<value_type>::const_iterator       const_iterator;
+  typedef std::pair<std::string, JsonRecordPtr> value_type;
+  typedef std::list<value_type>::iterator       iterator;
+  typedef std::list<value_type>::const_iterator const_iterator;
 
   virtual std::pair<iterator, bool> insert(value_type&&) = 0;
   virtual std::pair<iterator, bool> insert(std::string_view,
@@ -136,8 +134,7 @@ public:
 
 class JsonArray : public JsonRecord {
 public:
-  JsonArray() {};
-  virtual ~JsonArray() {};
+  virtual ~JsonArray() = default;
   virtual JsonArray& operator=(const JsonArray&) = 0;
   virtual JsonArray& operator=(JsonArray&&) = 0;
   JsonRecord::Type type() const { return JsonRecord::Type::ARRAY; }
@@ -169,8 +166,7 @@ public:
 
 class JsonData : public JsonRecord {
 public:
-  JsonData() {};
-  virtual ~JsonData() {};
+  virtual ~JsonData() = default;
   JsonRecord::Type type() const { return JsonRecord::Type::DATA; }
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;
@@ -183,4 +179,3 @@ public:
 };
 
 }
-

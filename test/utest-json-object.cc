@@ -21,7 +21,8 @@ TEST(JsonObject, basic_ops)
     root->insert({ "one"  , make_json_data(1.) });
     root->insert(  "two"  , two );
     root->insert(  "three", std::move(array) );
-    cout << root->size() << endl;
+    ASSERT_TRUE(root->size() == 3);
+    ASSERT_TRUE((*root)["three"]->as_array().size() == 3);
     root->serialize(cout, s_config_t());
     cout << endl;
     root->at("one") = make_json_data("ONE");
@@ -36,6 +37,7 @@ TEST(JsonObject, basic_ops)
     object->insert({ "a", make_json_data(1.) });
     object->insert({ "b", make_json_array() });
     object->insert({ "c", make_json_object() });
+    (*object)["c"]->as_object().insert({ "c1", make_json_data(1) });
     (*root)["five"] = object->clone();
     write_json_text(cout, root);
     cout << endl;
@@ -45,6 +47,11 @@ TEST(JsonObject, basic_ops)
     *object2 = *object;
     write_json_text(cout, object2);
     cout << endl;
+    ASSERT_TRUE(object2->size() == object->size());
+    auto object3 = make_json_object();
+    *object3 = std::move(*object2);
+    ASSERT_TRUE(object3->size() == object->size());
+    ASSERT_TRUE(object2->size() == 0);
   } catch (const runtime_error& e) {
     cout << "error: " << e.what() << endl;
     ASSERT_TRUE(false);
@@ -144,8 +151,8 @@ TEST(JsonObject, object_deserialize2)
 {
   const char* json_str = R"(
     { "one": 1,
-      "two": { item1 : 0.3125, 'item2' : "b" },
-      "three": [ '1', 2, "san" ] }
+      'two': { item1 : 0.3125, 'item2' : "b" },
+      three: [ '1', 2, "san" ], }
 )";
   string_view sv(json_str);
   string_view_istream istrm(sv);

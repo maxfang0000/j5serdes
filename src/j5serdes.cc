@@ -122,16 +122,12 @@ __retrieve_escaped_string(istream& istrm)
       ret += static_cast<char>(0x80 | ((u16_val >> 6) & 0x3f));
       ret += static_cast<char>(0x80 | (u16_val & 0x3f));
     } else {
-      if (istrm.eof() || istrm.get() != '\\') {
-        stringstream errss;
-        errss << __func__ << "(): unexpected end of input stream.";
-        throw runtime_error(errss.str());
-      }
-      if (istrm.eof() || istrm.get() != 'u') {
-        stringstream errss;
-        errss << __func__ << "(): unexpected character `" << c << "'.";
-        throw runtime_error(errss.str());
-      }
+      assert_msg(!istrm.eof() && istrm.get() == '\\',
+                 "expecting a subsequent code unit after the first code unit "
+                 "in the surrogate range, starting with \\u.");
+      assert_msg(!istrm.eof() && istrm.get() == 'u',
+                 "expecting a subsequent code unit after the first code unit "
+                 "in the surrogate range, received \\ but no u.");
       char u16s[5] = { 0 };
       for (int i=0; i<4; ++i) {
         u16s[i] = static_cast<char>(istrm.get());
@@ -139,11 +135,9 @@ __retrieve_escaped_string(istream& istrm)
                    "unexpected non-hexadecimal character `" << u16s[i] << "'.");
       }
       uint16_t u16s_val = std::stoul(u16s, nullptr, 16);
-      if (u16s_val < 0xdc00 || u16s_val > 0xdfff) {
-        stringstream errss;
-        errss << __func__ << "(): unexpected character `" << u16s << "'.";
-        throw runtime_error(errss.str());
-      }
+      assert_msg(u16s_val >= 0xdc00 && u16s_val <= 0xdfff,
+                 "the second code unit, or low surrogate, should be in the "
+                 "range [0xdc00, 0xdfff].");
       uint32_t u32_val = 0x10000 + (((u16_val - 0xd800) << 10) |
                                     (u16s_val - 0xdc00));
       ret += static_cast<char>(0xf0 | (u32_val >> 18));
@@ -213,7 +207,7 @@ class JsonObjectImpl : public JsonObject, public DestructionHelperIntf {
 public:
   JsonObjectImpl() {};
   JsonObjectImpl(const JsonObjectImpl&);
-  JsonObjectImpl(JsonObjectImpl&&);
+  JsonObjectImpl(JsonObjectImpl&&) noexcept;
   virtual ~JsonObjectImpl();
   JsonObject& operator=(const JsonObject&);
   JsonObject& operator=(JsonObject&&);
@@ -267,7 +261,7 @@ class JsonArrayImpl : public JsonArray, public DestructionHelperIntf {
 public:
   JsonArrayImpl() {};
   JsonArrayImpl(const JsonArrayImpl&);
-  JsonArrayImpl(JsonArrayImpl&&);
+  JsonArrayImpl(JsonArrayImpl&&) noexcept = default;
   JsonArray& operator=(const JsonArray&);
   JsonArray& operator=(JsonArray&&);
   virtual ~JsonArrayImpl();
@@ -284,16 +278,16 @@ private:
   iterator          end()         { return _data.end(); };
   const_iterator    end() const   { return _data.end(); };
 
-  JsonRecordPtr&    at(size_t idx)       { return _data.at(idx); };
-  const JsonRecord* at(size_t idx) const { return _data.at(idx).get(); };
+  JsonRecordPtr&    at(size_t i)       { return _data.at(i); };
+  const JsonRecord* at(size_t i) const { return _data.at(i).get(); };
 
   void              clear()       { _data.clear(); };
 
   bool              empty() const { return _data.empty(); };
   size_t            size() const  { return _data.size();  };
 
-  JsonRecordPtr&    operator[](size_t idx)       { return _data.at(idx); };
-  const JsonRecord* operator[](size_t idx) const { return _data.at(idx).get(); };
+  JsonRecordPtr&    operator[](size_t i)       { return _data.at(i); };
+  const JsonRecord* operator[](size_t i) const { return _data.at(i).get(); };
 
   JsonArray&        as_array() { return *this; };
   const JsonArray&  as_array() const { return *this; };
@@ -332,7 +326,11 @@ public:
                                     _string_buf(value), _long_buf(0) {};
   JsonDataImpl(bool value) : _native_type(NativeType::BOOL),
                              _long_buf(value ? 1 : 0) {};
-  virtual ~JsonDataImpl() = default;
+  JsonDataImpl(const JsonDataImpl&) = default;
+  JsonDataImpl(JsonDataImpl&&) noexcept = default;
+  JsonDataImpl& operator=(const JsonDataImpl&) = default;
+  JsonDataImpl& operator=(JsonDataImpl&&) noexcept = default;
+  virtual ~JsonDataImpl() noexcept = default;
 
   friend JsonDataPtr  make_json_data(istream&, const d_config_t&);
   friend void         write_json_data_text(ostream&, const JsonData*,
@@ -367,13 +365,13 @@ private:
 
 JsonObjectImpl::JsonObjectImpl(const JsonObjectImpl& src)
 {
-  for (auto it=src._data.begin(); it!=src._data.end(); ++it) {
-    _data.push_back({ it->first, it->second->clone() });
-    _map.insert({ it->first, prev(_data.end()) });
+  for (auto& entry : src._data) {
+    _data.push_back({ entry.first, entry.second->clone() });
+    _map.insert({ entry.first, prev(_data.end()) });
   }
 }
 
-JsonObjectImpl::JsonObjectImpl(JsonObjectImpl&& src)
+JsonObjectImpl::JsonObjectImpl(JsonObjectImpl&& src) noexcept
   : _data(std::move(src._data))
 {
   src._data.clear();

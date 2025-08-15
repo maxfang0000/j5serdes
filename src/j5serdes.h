@@ -46,6 +46,10 @@ make_json_object();
 
 JsonArrayPtr
 make_json_array();
+JsonArrayPtr
+make_json_array(const JsonArray&);
+JsonArrayPtr
+make_json_array(JsonArray&&);
 
 JsonDataPtr
 make_json_data();
@@ -171,7 +175,7 @@ public:
   virtual void serialize(std::ostream&,
                          const s_config_t& cfg = s_config_t()) const = 0;
 
-  virtual std::string_view   as_string() const = 0;
+  virtual std::string        as_string() const = 0;
   virtual bool               as_bool() const = 0;
   virtual double             as_double() const = 0;
   virtual long long          as_int() const = 0;

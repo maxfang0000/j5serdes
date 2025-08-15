@@ -169,7 +169,8 @@ TEST(JsonObject, object_deserialize2)
     auto& ent21 = object2.at("item1")->as_data();
     ASSERT_TRUE(ent21.type() == JsonRecord::Type::DATA);
     ASSERT_TRUE(ent21.as_double() == 0.3125);
-    ASSERT_TRUE(strncmp(ent21.as_string().data(), "0.3125", 6) == 0);
+    string str21 = ent21.as_string();
+    ASSERT_TRUE(strncmp(str21.c_str(), "0.3125", 6) == 0);
     ASSERT_TRUE(ent21.as_bool() == true);
     ASSERT_TRUE(ent21.as_int() == 0);
     ASSERT_TRUE(ent21.as_unsigned() == 0);

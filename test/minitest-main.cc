@@ -22,7 +22,6 @@ static unordered_map<string_view, int> __arg_counts
 int main(int argc, const char** argv)
 {
   unordered_map<string_view, string_view> args;
-  bool expect_arg = false;
   for (int i=1; i<argc; ++i) {
     auto it = __arg_counts.find(argv[i]);
     if (it != __arg_counts.end()) {

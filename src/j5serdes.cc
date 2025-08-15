@@ -308,7 +308,6 @@ public:
   };
   JsonDataImpl() : _native_type(NativeType::NONE) {
     _content.l = 0;
-    cout << "JsonDataImpl size is " << sizeof(*this) << "bytes." << endl;
   };
   JsonDataImpl(double value) : _native_type(NativeType::FLOAT) {
     _content.d = value;

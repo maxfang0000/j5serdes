@@ -12,11 +12,13 @@ class JsonRecord;
 class JsonObject;
 class JsonArray;
 class JsonData;
+class JsonString;
 
 typedef std::unique_ptr<JsonRecord> JsonRecordPtr;
 typedef std::unique_ptr<JsonObject> JsonObjectPtr;
 typedef std::unique_ptr<JsonArray>  JsonArrayPtr;
 typedef std::unique_ptr<JsonData>   JsonDataPtr;
+typedef std::unique_ptr<JsonString> JsonStringPtr;
 
 struct d_config_t
 {
@@ -57,13 +59,15 @@ make_json_array(JsonArray&&);
 
 JsonDataPtr
 make_json_data();
+JsonStringPtr
+make_json_string();
 
 template<typename T>
 JsonDataPtr
 make_json_data(T value);
-template<>
-JsonDataPtr
-make_json_data<const char*>(const char*);
+
+JsonStringPtr
+make_json_string(std::string_view value);
 
 void
 write_json_text(std::ostream&, const JsonRecord*,
@@ -79,16 +83,19 @@ void write_json_text(std::ostream&, const std::unique_ptr<T>&,
 
 class JsonRecord {
 public:
-  enum class Type : unsigned int { OBJECT = 0, ARRAY = 1, DATA = 2 };
+  enum class Type : unsigned int
+    { OBJECT = 0, ARRAY = 1, DATA = 2, STRING = 3 };
   virtual ~JsonRecord() = default;
   virtual Type type() const = 0;
   virtual JsonRecordPtr clone() const = 0;
   virtual JsonArray& as_array();
   virtual JsonObject& as_object();
   virtual JsonData& as_data();
+  virtual JsonString& as_string();
   virtual const JsonArray& as_array() const;
   virtual const JsonObject& as_object() const;
   virtual const JsonData& as_data() const;
+  virtual const JsonString& as_string() const;
 };
 
 class JsonObject : public JsonRecord {
@@ -166,11 +173,25 @@ public:
   virtual ~JsonData() = default;
   JsonRecord::Type type() const { return JsonRecord::Type::DATA; };
 
-  virtual std::string        as_string() const = 0;
   virtual bool               as_bool() const = 0;
   virtual double             as_double() const = 0;
   virtual long long          as_int() const = 0;
   virtual unsigned long long as_unsigned() const = 0;
+
+  virtual std::string        to_string() const = 0;
+};
+
+class JsonString : public JsonRecord {
+public:
+  virtual ~JsonString() = default;
+  JsonRecord::Type type() const { return JsonRecord::Type::STRING; }
+
+  virtual bool               as_bool() const = 0;
+  virtual double             as_double() const = 0;
+  virtual long long          as_int() const = 0;
+  virtual unsigned long long as_unsigned() const = 0;
+
+  virtual const std::string& to_string() const = 0;
 };
 
 }

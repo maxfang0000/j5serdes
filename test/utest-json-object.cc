@@ -12,12 +12,12 @@ using namespace std;
 TEST(JsonObject, basic_ops)
 {
   try {
-    JsonRecordPtr two = make_json_data(std::string("two"));
+    JsonRecordPtr two = make_json_string(std::string("two"));
     auto root = make_json_object();
     auto array = make_json_array();
     array->push_back(make_json_data(true));
     array->push_back(two);
-    array->push_back(make_json_data("three"));
+    array->push_back(make_json_string("three"));
     root->insert({ "one"  , make_json_data(1.) });
     root->insert(  "two"  , two );
     root->insert(  "three", std::move(array) );
@@ -25,7 +25,7 @@ TEST(JsonObject, basic_ops)
     ASSERT_TRUE((*root)["three"]->as_array().size() == 3);
     write_json_text(cout, root);
     cout << endl;
-    root->at("one") = make_json_data("ONE");
+    root->at("one") = make_json_string("ONE");
     (*root)["two"] = make_json_data(2.);
     (*root)["four"] = make_json_array();
     (*root)["four"]->as_array().push_back(make_json_data(1.0));
@@ -169,14 +169,14 @@ TEST(JsonObject, object_deserialize2)
     auto& ent21 = object2.at("item1")->as_data();
     ASSERT_TRUE(ent21.type() == JsonRecord::Type::DATA);
     ASSERT_TRUE(ent21.as_double() == 0.3125);
-    string str21 = ent21.as_string();
+    string str21 = ent21.to_string();
     ASSERT_TRUE(strncmp(str21.c_str(), "0.3125", 6) == 0);
     ASSERT_TRUE(ent21.as_bool() == true);
     ASSERT_TRUE(ent21.as_int() == 0);
     ASSERT_TRUE(ent21.as_unsigned() == 0);
     auto& array = it3->second->as_array();
     ASSERT_TRUE(array.size() == 3);
-    ASSERT_TRUE(array[0]->type() == JsonRecord::Type::DATA);
+    ASSERT_TRUE(array[0]->type() == JsonRecord::Type::STRING);
     ASSERT_TRUE(array[1]->type() == JsonRecord::Type::DATA);
     cout << "parsed and serialized:" << endl;
     write_json_text(cout, record);

@@ -198,12 +198,12 @@ __escape_string(string_view sv, bool in_sq = false)
 ////////////////////////////////////////////////////////////////////////////////
 // implementation class declarations
 
-class JsonObjectImpl : public JsonObject {
+class JsonObjectImpl final : public JsonObject {
 public:
   JsonObjectImpl() {};
   JsonObjectImpl(const JsonObjectImpl&);
   JsonObjectImpl(JsonObjectImpl&&) noexcept;
-  virtual ~JsonObjectImpl();
+  ~JsonObjectImpl() noexcept;
   JsonObject& operator=(const JsonObject&);
   JsonObject& operator=(JsonObject&&);
 
@@ -211,7 +211,6 @@ public:
 
 private:
   JsonRecordPtr        clone() const;
-  void                 serialize(ostream&, const s_config_t&) const;
 
   pair<iterator, bool> insert(value_type&&);
   pair<iterator, bool> insert(string_view, JsonRecordPtr&&);
@@ -242,30 +241,25 @@ private:
 
   JsonObject&          as_object() { return *this; };
   const JsonObject&    as_object() const { return *this; };
-  JsonArray&           as_array();
-  const JsonArray&     as_array() const;
-  JsonData&            as_data();
-  const JsonData&      as_data() const;
 
 private:
   list<value_type> _data;
   unordered_map<string, list<value_type>::iterator> _map;
 };
 
-class JsonArrayImpl : public JsonArray {
+class JsonArrayImpl final : public JsonArray {
 public:
   JsonArrayImpl() {};
   JsonArrayImpl(const JsonArrayImpl&);
   JsonArrayImpl(JsonArrayImpl&&) noexcept;
   JsonArray& operator=(const JsonArray&);
   JsonArray& operator=(JsonArray&&);
-  virtual ~JsonArrayImpl();
+  ~JsonArrayImpl() noexcept;
 
   void unlink_child_records(deque<JsonRecord*>&);
 
 private:
   JsonRecordPtr     clone() const;
-  void              serialize(ostream&, const s_config_t&) const;
 
   void              push_back(JsonRecordPtr&&);
   void              push_back(const JsonRecordPtr&);
@@ -286,12 +280,8 @@ private:
   JsonRecordPtr&    operator[](size_t i)       { return _data.at(i); };
   const JsonRecord* operator[](size_t i) const { return _data.at(i).get(); };
 
-  JsonArray&        as_array() { return *this; };
+  JsonArray&        as_array()       { return *this; };
   const JsonArray&  as_array() const { return *this; };
-  JsonObject&       as_object();
-  const JsonObject& as_object() const;
-  JsonData&         as_data();
-  const JsonData&   as_data() const;
 
 private:
   vector<JsonRecordPtr> _data;
@@ -342,7 +332,6 @@ public:
 
 private:
   JsonRecordPtr      clone() const;
-  void               serialize(ostream&, const s_config_t&) const;
 
   string             as_string() const;
   bool               as_bool() const;
@@ -352,10 +341,6 @@ private:
 
   JsonData&          as_data() { return *this; };
   const JsonData&    as_data() const { return *this; };
-  JsonObject&        as_object();
-  const JsonObject&  as_object() const;
-  JsonArray&         as_array();
-  const JsonArray&   as_array() const;
 
 private:
   union {
@@ -389,6 +374,7 @@ JsonObjectImpl::JsonObjectImpl(JsonObjectImpl&& src) noexcept
 JsonObject&
 JsonObjectImpl::operator=(const JsonObject& src)
 {
+  if (this == &src) { return *this; }
   _map.clear();
   _data.clear();
   const JsonObjectImpl& src_impl = static_cast<const JsonObjectImpl&>(src);
@@ -414,7 +400,7 @@ JsonObjectImpl::operator=(JsonObject&& src)
   return *this;
 }
 
-JsonObjectImpl::~JsonObjectImpl()
+JsonObjectImpl::~JsonObjectImpl() noexcept
 {
   deque<JsonRecord*> ptrs;
   unlink_child_records(ptrs);
@@ -454,12 +440,6 @@ JsonObjectImpl::clone() const
     ret->insert(entry.first, entry.second->clone());
   }
   return ret;
-}
-
-void
-JsonObjectImpl::serialize(ostream& strm, const s_config_t& cfg) const
-{
-  write_json_text(strm, this, cfg);
 }
 
 pair<JsonObject::iterator, bool>
@@ -552,6 +532,7 @@ JsonArrayImpl::JsonArrayImpl(JsonArrayImpl&& src) noexcept
 JsonArray&
 JsonArrayImpl::operator=(const JsonArray& src)
 {
+  if (this == &src) { return *this; }
   _data.clear();
   const JsonArrayImpl& src_impl = static_cast<const JsonArrayImpl&>(src);
   for (auto& entry : src_impl._data) { _data.push_back(entry->clone()); }
@@ -564,6 +545,7 @@ JsonArrayImpl::operator=(JsonArray&& src)
   _data.clear();
   JsonArrayImpl&& src_impl = static_cast<JsonArrayImpl&&>(src);
   _data = std::move(src_impl._data);
+  src_impl._data.clear();
   return *this;
 }
 
@@ -577,7 +559,7 @@ JsonArrayImpl::unlink_child_records(deque<JsonRecord*>& ptrs)
   _data.clear();
 }
 
-JsonArrayImpl::~JsonArrayImpl()
+JsonArrayImpl::~JsonArrayImpl() noexcept
 {
   deque<JsonRecord*> ptrs;
   unlink_child_records(ptrs);
@@ -606,12 +588,6 @@ JsonArrayImpl::clone() const
     ret->push_back(item->clone());
   }
   return ret;
-}
-
-void
-JsonArrayImpl::serialize(ostream& strm, const s_config_t& cfg) const
-{
-  write_json_text(strm, this, cfg);
 }
 
 void
@@ -719,12 +695,6 @@ JsonRecordPtr
 JsonDataImpl::clone() const
 {
   return make_unique<JsonDataImpl>(*this);
-}
-
-void
-JsonDataImpl::serialize(ostream& strm, const s_config_t& cfg) const
-{
-  write_json_text(strm, this, cfg);
 }
 
 string
@@ -837,6 +807,20 @@ make_json_object()
   return make_unique<JsonObjectImpl>();
 }
 
+JsonObjectPtr
+make_json_object(const JsonObject& src)
+{
+  const JsonObjectImpl& src_impl = static_cast<const JsonObjectImpl&>(src);
+  return make_unique<JsonObjectImpl>(src_impl);
+}
+
+JsonObjectPtr
+make_json_object(JsonObject&& src)
+{
+  JsonObjectImpl&& src_impl = static_cast<JsonObjectImpl&&>(src);
+  return make_unique<JsonObjectImpl>(std::move(src_impl));
+}
+
 JsonArrayPtr
 make_json_array()
 {
@@ -895,18 +879,17 @@ make_json_data<string>(string);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define DISABLE_CONVERSION(dest, Dest, Src)                                    \
-  Json ## Dest & Json ## Src ## Impl::as_ ## dest()                            \
-  { throw runtime_error("Json" #Src "::as_" #dest "() is not allowed."); }     \
-  const Json ## Dest & Json ## Src ## Impl::as_ ## dest() const                \
-  { throw runtime_error("Json" #Src "::as_" #dest "() is not allowed."); }
+#define DISABLE_CONVERSION(dest, Dest)                                         \
+  Json ## Dest & JsonRecord::as_ ## dest()                                     \
+  { throw runtime_error("as_" #dest "() is not allowed "                       \
+                        "on non-" #dest " record."); }                         \
+  const Json ## Dest & JsonRecord::as_ ## dest() const                         \
+  { throw runtime_error("as_" #dest "() is not allowed "                       \
+                        "on non-" #dest " record."); }
 
-DISABLE_CONVERSION(array, Array, Object);
-DISABLE_CONVERSION(data, Data, Object);
-DISABLE_CONVERSION(object, Object, Array);
-DISABLE_CONVERSION(data, Data, Array);
-DISABLE_CONVERSION(object, Object, Data);
-DISABLE_CONVERSION(array, Array, Data);
+DISABLE_CONVERSION(array, Array);
+DISABLE_CONVERSION(object, Object);
+DISABLE_CONVERSION(data, Data);
 
 #undef DISABLE_CONVERSION
 
@@ -1307,29 +1290,18 @@ write_json_text(ostream& ostrm, const JsonRecord* record, const s_config_t& cfg)
   }
 }
 
-void
-write_json_text(ostream& ostrm, const JsonRecordPtr& record,
-                const s_config_t& cfg)
-{
-  write_json_text(ostrm, record.get(), cfg);
-}
-void
-write_json_text(ostream& ostrm, const JsonObjectPtr& record,
-                const s_config_t& cfg)
-{
-  write_json_text(ostrm, record.get(), cfg);
-}
-void
-write_json_text(ostream& ostrm, const JsonArrayPtr& record,
-                const s_config_t& cfg)
-{
-  write_json_text(ostrm, record.get(), cfg);
-}
-void
-write_json_text(ostream& ostrm, const JsonDataPtr& record,
-                const s_config_t& cfg)
-{
-  write_json_data_text(ostrm, record.get(), cfg);
-}
+template <typename T>
+void write_json_text(ostream& ostrm, const unique_ptr<T>& record,
+                     const s_config_t& cfg)
+{ write_json_text(ostrm, record.get(), cfg); }
+
+template void
+write_json_text<JsonRecord>(ostream&, const JsonRecordPtr&, const s_config_t&);
+template void
+write_json_text<JsonObject>(ostream&, const JsonObjectPtr&, const s_config_t&);
+template void
+write_json_text<JsonArray>(ostream&, const JsonArrayPtr&, const s_config_t&);
+template void
+write_json_text<JsonData>(ostream&, const JsonDataPtr&, const s_config_t&);
 
 }

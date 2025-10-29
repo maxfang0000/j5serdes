@@ -21,7 +21,7 @@ int main(int argc, const char* argv[])
 
   try {
     auto json = make_json_record(ifstr);
-    json->serialize(cout);
+    write_json_text(cout, json);
     cout << endl;
   } catch (const exception& e) {
     cerr << "Error: " << e.what() << endl;

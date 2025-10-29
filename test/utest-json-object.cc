@@ -23,7 +23,7 @@ TEST(JsonObject, basic_ops)
     root->insert(  "three", std::move(array) );
     ASSERT_TRUE(root->size() == 3);
     ASSERT_TRUE((*root)["three"]->as_array().size() == 3);
-    root->serialize(cout, s_config_t());
+    write_json_text(cout, root);
     cout << endl;
     root->at("one") = make_json_data("ONE");
     (*root)["two"] = make_json_data(2.);
@@ -85,7 +85,7 @@ TEST(JsonObject, data_deserialize1)
   cout << "original:" << endl << json_str << endl;
   auto data = make_json_record(istrm, d_config_t());
   cout << "parsed and serialized:" << endl;
-  data->serialize(cout);
+  write_json_text(cout, data);
   cout << endl;
 }
 
@@ -99,7 +99,7 @@ TEST(JsonObject, data_deserialize2)
   cout << "original:" << endl << json_str << endl;
   auto data = make_json_record(istrm, d_config_t());
   cout << "parsed and serialized:" << endl;
-  data->serialize(cout);
+  write_json_text(cout, data);
   cout << endl;
 }
 
@@ -113,7 +113,7 @@ TEST(JsonObject, data_deserialize3)
   cout << "original:" << endl << json_str << endl;
   auto data = make_json_record(istrm, d_config_t());
   cout << "parsed and serialized:" << endl;
-  data->serialize(cout);
+  write_json_text(cout, data);
   cout << endl;
 }
 
@@ -127,7 +127,7 @@ TEST(JsonObject, array_deserialize1)
   cout << "original:" << endl << json_str << endl;
   auto array = make_json_record(istrm, d_config_t());
   cout << "parsed and serialized:" << endl;
-  array->serialize(cout);
+  write_json_text(cout, array);
   cout << endl;
 }
 
@@ -143,7 +143,7 @@ TEST(JsonObject, object_deserialize1)
   cout << "original:" << endl << json_str << endl;
   auto object = make_json_record(istrm, d_config_t());
   cout << "parsed and serialized:" << endl;
-  object->serialize(cout);
+  write_json_text(cout, object);
   cout << endl;
 }
 
@@ -197,7 +197,7 @@ TEST(JsonObject, array_deserialize_deep_nesting)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   auto array = make_json_record(istrm, d_config_t());
-  //array->serialize(cout);
+  //write_json_text(cout, array);
   //cout << endl;
 }
 
@@ -217,6 +217,6 @@ TEST(JsonObject, object_deserialize_deep_nesting)
   string_view sv(json_str);
   string_view_istream istrm(sv);
   auto object = make_json_record(istrm, d_config_t());
-  //object->serialize(cout);
+  //write_json_text(cout, object);
   //cout << endl;
 }

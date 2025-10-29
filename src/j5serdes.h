@@ -43,6 +43,10 @@ make_json_record(std::istream&, const d_config_t& cfg = d_config_t());
 
 JsonObjectPtr
 make_json_object();
+JsonObjectPtr
+make_json_object(const JsonObject&);
+JsonObjectPtr
+make_json_object(JsonObject&&);
 
 JsonArrayPtr
 make_json_array();
@@ -65,18 +69,13 @@ void
 write_json_text(std::ostream&, const JsonRecord*,
                 const s_config_t& cfg = s_config_t());
 
-void
-write_json_text(std::ostream&, const JsonRecordPtr&,
-                const s_config_t& cfg = s_config_t());
-void
-write_json_text(std::ostream&, const JsonObjectPtr&,
-                const s_config_t& cfg = s_config_t());
-void
-write_json_text(std::ostream&, const JsonArrayPtr&,
-                const s_config_t& cfg = s_config_t());
-void
-write_json_text(std::ostream&, const JsonDataPtr&,
-                const s_config_t& cfg = s_config_t());
+/* The template enables direct use with JsonRecordPtr or derived
+ * unique pointers.
+ */
+template <typename T>
+void write_json_text(std::ostream&, const std::unique_ptr<T>&,
+                     const s_config_t& cfg = s_config_t());
+
 
 class JsonRecord {
 public:
@@ -84,14 +83,12 @@ public:
   virtual ~JsonRecord() = default;
   virtual Type type() const = 0;
   virtual JsonRecordPtr clone() const = 0;
-  virtual void serialize(std::ostream&,
-                         const s_config_t& cfg = s_config_t()) const = 0;
-  virtual JsonArray& as_array() = 0;
-  virtual JsonObject& as_object() = 0;
-  virtual JsonData& as_data() = 0;
-  virtual const JsonArray& as_array() const = 0;
-  virtual const JsonObject& as_object() const = 0;
-  virtual const JsonData& as_data() const = 0;
+  virtual JsonArray& as_array();
+  virtual JsonObject& as_object();
+  virtual JsonData& as_data();
+  virtual const JsonArray& as_array() const;
+  virtual const JsonObject& as_object() const;
+  virtual const JsonData& as_data() const;
 };
 
 class JsonObject : public JsonRecord {
@@ -100,8 +97,6 @@ public:
   virtual JsonObject& operator=(const JsonObject&) = 0;
   virtual JsonObject& operator=(JsonObject&&) = 0;
   JsonRecord::Type type() const { return JsonRecord::Type::OBJECT; };
-  virtual void serialize(std::ostream&,
-                         const s_config_t& cfg = s_config_t()) const = 0;
 
   typedef std::pair<std::string, JsonRecordPtr> value_type;
   typedef std::list<value_type>::iterator       iterator;
@@ -141,9 +136,7 @@ public:
   virtual ~JsonArray() = default;
   virtual JsonArray& operator=(const JsonArray&) = 0;
   virtual JsonArray& operator=(JsonArray&&) = 0;
-  JsonRecord::Type type() const { return JsonRecord::Type::ARRAY; }
-  virtual void serialize(std::ostream&,
-                         const s_config_t& cfg = s_config_t()) const = 0;
+  JsonRecord::Type type() const { return JsonRecord::Type::ARRAY; };
 
   typedef std::vector<JsonRecordPtr>::iterator       iterator;
   typedef std::vector<JsonRecordPtr>::const_iterator const_iterator;
@@ -171,9 +164,7 @@ public:
 class JsonData : public JsonRecord {
 public:
   virtual ~JsonData() = default;
-  JsonRecord::Type type() const { return JsonRecord::Type::DATA; }
-  virtual void serialize(std::ostream&,
-                         const s_config_t& cfg = s_config_t()) const = 0;
+  JsonRecord::Type type() const { return JsonRecord::Type::DATA; };
 
   virtual std::string        as_string() const = 0;
   virtual bool               as_bool() const = 0;
